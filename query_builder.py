@@ -20,7 +20,10 @@ _LOCATION_TERMS = {
 }
 
 _SITE_FILTER = (
-    "(site:greenhouse.io/jobs/ OR site:jobs.lever.co OR site:jobs.ashbyhq.com)"
+    "(site:greenhouse.io/jobs/ OR site:jobs.lever.co OR site:jobs.ashbyhq.com"
+    " OR site:apply.workable.com OR site:*.breezy.hr/p/"
+    " OR site:*.recruitee.com/o/ OR site:*.bamboohr.com/jobs/"
+    " OR site:jobs.smartrecruiters.com)"
 )
 
 _EXCLUSIONS = "-inurl:privacy -inurl:terms -inurl:help"

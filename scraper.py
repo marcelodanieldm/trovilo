@@ -30,8 +30,12 @@ from query_builder import build_duckduckgo_query
 ATS_DOMAINS = [
     "boards.greenhouse.io",
     "jobs.lever.co",
-    "apply.workable.com",
     "jobs.ashbyhq.com",
+    "apply.workable.com",
+    "breezy.hr",
+    "recruitee.com",
+    "bamboohr.com",
+    "jobs.smartrecruiters.com",
 ]
 
 DDG_HTML_URL = "https://html.duckduckgo.com/html/"
@@ -46,14 +50,35 @@ def _jitter(min_s: float = 2.0, max_s: float = 5.0) -> None:
     time.sleep(random.uniform(min_s, max_s))
 
 
+# Prefijos de subdominio genéricos que no son nombres de empresa
+_GENERIC_SUBDOMAINS = {"www", "jobs", "boards", "apply", "careers", "work", "hire"}
+
+
 def _extract_company(url: str) -> str:
     """
-    Extrae el nombre de la empresa desde la URL del ATS.
-    Todos los ATS objetivo siguen el patrón: https://dominio/empresa/...
+    Extrae el slug de empresa desde la URL del ATS sin hardcodear cada plataforma.
+
+    Estrategia (en orden de prioridad):
+      1. Si el subdominio más a la izquierda NO es genérico (www, jobs, apply…),
+         es el slug de empresa → ej. 'acme.breezy.hr' → 'Acme'
+      2. Si el subdominio es genérico, el primer segmento de path es el slug
+         → ej. 'apply.workable.com/acme-corp/...' → 'Acme Corp'
     """
     try:
-        parts = url.split("/")
-        return parts[3].replace("-", " ").title() if len(parts) > 3 else "Desconocida"
+        parsed   = urlparse(url if url.startswith("http") else f"https://{url}")
+        hostname = parsed.netloc.lower()
+        # Subdominio más a la izquierda (antes del primer punto)
+        leftmost = hostname.split(".")[0]
+
+        if leftmost not in _GENERIC_SUBDOMAINS:
+            slug = leftmost
+        else:
+            # Primer segmento no vacío del path
+            segments = [s for s in parsed.path.split("/") if s]
+            slug = segments[0] if segments else ""
+
+        return slug.replace("-", " ").replace("_", " ").title() if slug else "Desconocida"
+
     except Exception:
         return "Desconocida"
 
@@ -83,14 +108,18 @@ def is_valid_job_url(url: str) -> bool:
         hostname = parsed.netloc.lower()
         path     = parsed.path.lower()
 
-        # Regla 1: dominio exacto de ATS
+        # Regla 1: dominio debe contener uno de los ATS conocidos
         valid_domains = (
-            "boards.greenhouse.io",
+            "greenhouse.io",
             "jobs.lever.co",
             "jobs.ashbyhq.com",
             "apply.workable.com",
+            "breezy.hr",
+            "recruitee.com",
+            "bamboohr.com",
+            "jobs.smartrecruiters.com",
         )
-        if not any(hostname == d or hostname.endswith("." + d) for d in valid_domains):
+        if not any(d in hostname for d in valid_domains):
             return False
 
         # Regla 2: descartar páginas de privacidad, términos y ayuda
