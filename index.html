@@ -5,6 +5,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>Trovilo — Configurar búsqueda</title>
     <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
     <style>
       /* Transición de opacidad para el cambio login ↔ dashboard */
       .fade { transition: opacity 0.25s ease; }
@@ -299,6 +300,52 @@
             </div>
           </div>
 
+          <!-- ── Expandir Fuentes ─────────────────────────────────────────── -->
+          <div class="mt-8 border-t border-gray-800 pt-6">
+            <h3 class="text-sm font-semibold text-gray-300 mb-1">🌐 Expandir Fuentes</h3>
+            <p class="text-xs text-gray-500 mb-4">
+              Subí un archivo CSV/Excel con URLs de job boards en la primera columna,
+              o pegá las URLs manualmente. Los dominios se agregarán a la búsqueda.
+            </p>
+
+            <!-- File input -->
+            <label class="block text-xs text-gray-400 mb-1">Archivo CSV / Excel</label>
+            <input
+              type="file"
+              id="sourceFile"
+              accept=".csv,.xlsx,.xls"
+              onchange="handleSourceUpload(event)"
+              class="block w-full text-xs text-gray-400 file:mr-3 file:py-1.5 file:px-3
+                     file:rounded-md file:border-0 file:text-xs file:font-medium
+                     file:bg-gray-700 file:text-gray-300 hover:file:bg-indigo-600 hover:file:text-white
+                     file:cursor-pointer cursor-pointer transition"
+            />
+
+            <!-- Textarea fallback -->
+            <label class="block text-xs text-gray-400 mt-4 mb-1">O pegá URLs manualmente (una por línea)</label>
+            <textarea
+              id="manualUrls"
+              rows="4"
+              placeholder="https://jobs.lever.co/empresa/job-id&#10;https://boards.greenhouse.io/empresa/jobs/123"
+              class="w-full rounded-lg bg-gray-800 border border-gray-700 text-white placeholder-gray-500
+                     px-3 py-2 text-xs focus:outline-none focus:ring-2 focus:ring-indigo-500 transition resize-none"
+            ></textarea>
+            <button
+              type="button"
+              onclick="handleManualUrls()"
+              class="mt-2 rounded-lg bg-gray-700 hover:bg-indigo-600 text-gray-300 hover:text-white
+                     text-xs px-4 py-1.5 transition"
+            >
+              Procesar URLs
+            </button>
+
+            <!-- Resultado de dominios extraídos -->
+            <div id="sourcesResult" class="hidden mt-4">
+              <p class="text-xs text-gray-400 mb-2">Dominios extraídos <span id="sourcesCount" class="text-indigo-400 font-semibold"></span>:</p>
+              <div id="sourcesTags" class="flex flex-wrap gap-1.5"></div>
+            </div>
+          </div>
+
           <!-- Modal de edición -->
           <div id="editModal" class="hidden fixed inset-0 z-50 flex items-center justify-center bg-black/60 px-4">
             <div class="w-full max-w-sm bg-gray-900 rounded-2xl shadow-2xl p-6 space-y-4">
@@ -348,10 +395,129 @@
           </div>
         </div>
       </main>
+
+      <!-- ═══════════════════════════════════════════════════════════════════
+           SECCIÓN: EXPANDIR FUENTES
+      ════════════════════════════════════════════════════════════════════ -->
+      <section class="w-full max-w-md mx-auto px-4 pb-10">
+        <div class="bg-gray-900 rounded-2xl shadow-xl p-6 mt-4">
+          <h3 class="text-sm font-semibold text-white mb-1">🔗 Expandir Fuentes</h3>
+          <p class="text-xs text-gray-400 mb-4">
+            Subí un archivo CSV/Excel con URLs de job boards en la primera columna,
+            o pegá las URLs manualmente abajo. Los dominios se agregarán a la lista de búsqueda.
+          </p>
+
+          <!-- File input -->
+          <div class="mb-3">
+            <label class="block text-xs text-gray-400 mb-1">Subir archivo (.csv, .xlsx)</label>
+            <input
+              type="file"
+              id="sourceFileInput"
+              accept=".csv,.xlsx,.xls"
+              onchange="handleSourceUpload(event)"
+              class="w-full text-xs text-gray-300 bg-gray-800 border border-gray-700 rounded-lg
+                     px-3 py-2 file:mr-3 file:py-1 file:px-3 file:rounded-md file:border-0
+                     file:text-xs file:font-semibold file:bg-indigo-600 file:text-white
+                     hover:file:bg-indigo-500 cursor-pointer transition"
+            />
+          </div>
+
+          <!-- Textarea fallback -->
+          <div class="mb-3">
+            <label class="block text-xs text-gray-400 mb-1">O pegá las URLs manualmente (una por línea)</label>
+            <textarea
+              id="sourceTextarea"
+              rows="4"
+              placeholder="https://jobs.example.com&#10;https://anotherboard.io/jobs"
+              class="w-full rounded-lg bg-gray-800 border border-gray-700 text-white
+                     placeholder-gray-500 px-3 py-2 text-xs
+                     focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent
+                     transition resize-none"
+            ></textarea>
+          </div>
+
+          <button
+            type="button"
+            onclick="processManualSources()"
+            class="w-full rounded-lg bg-indigo-600 hover:bg-indigo-500 text-white text-xs
+                   font-semibold py-2 transition"
+          >
+            Agregar URLs manuales
+          </button>
+
+          <!-- Resultado -->
+          <div id="sourcesResult" class="hidden mt-4">
+            <p class="text-xs text-gray-400 mb-2">Dominios extraídos <span id="sourcesCount" class="text-indigo-400 font-semibold"></span>:</p>
+            <div id="sourcesTags" class="flex flex-wrap gap-1.5 mb-3"></div>
+            <button
+              type="button"
+              onclick="validateDomainsAgainstSystem(window._lastParsedDomains || [])"
+              class="rounded-lg bg-indigo-600 hover:bg-indigo-500 text-white text-xs font-semibold px-4 py-1.5 transition"
+            >
+              Validar contra el sistema
+            </button>
+          </div>
+
+          <!-- Panel de validación -->
+          <div id="validationPanel" class="hidden mt-5 space-y-4">
+            <!-- Ya en el sistema -->
+            <div id="alreadyInSystem" class="hidden">
+              <p class="text-xs text-gray-500 mb-1">✅ Ya en el sistema <span id="alreadyCount" class="text-green-400 font-semibold"></span></p>
+              <div id="alreadyTags" class="flex flex-wrap gap-1.5"></div>
+            </div>
+
+            <!-- Nuevos dominios -->
+            <div id="newDomainsSection" class="hidden">
+              <p class="text-xs text-gray-400 mb-2">🆕 Nuevos dominios encontrados <span id="newCount" class="text-yellow-400 font-semibold"></span></p>
+              <div class="rounded-lg border border-gray-700 overflow-hidden">
+                <table class="w-full text-xs">
+                  <thead class="bg-gray-800 text-gray-400">
+                    <tr>
+                      <th class="px-3 py-2 text-left">
+                        <label class="flex items-center gap-2 cursor-pointer">
+                          <input type="checkbox" id="selectAllNew" checked
+                            onchange="toggleAllNewDomains(this.checked)"
+                            class="rounded bg-gray-700 border-gray-600 text-indigo-500" />
+                          Seleccionar todos
+                        </label>
+                      </th>
+                    </tr>
+                  </thead>
+                  <tbody id="newDomainsTableBody" class="divide-y divide-gray-700/50 text-gray-300">
+                  </tbody>
+                </table>
+              </div>
+              <button
+                id="addSourcesBtn"
+                type="button"
+                onclick="saveSelectedDomains()"
+                class="mt-3 w-full rounded-lg bg-indigo-600 hover:bg-indigo-500 text-white text-xs font-semibold py-2 transition disabled:opacity-50"
+              >
+                Agregar fuentes seleccionadas
+              </button>
+              <div id="saveDomainsMsg" class="hidden mt-2 text-xs text-center rounded-lg px-3 py-2 font-medium"></div>
+            </div>
+
+            <!-- Alerta de éxito (se muestra tras inserción exitosa) -->
+            <div id="sourcesSuccessAlert" class="hidden mt-4 flex items-start gap-3 rounded-xl border border-green-600/40 bg-green-900/30 px-4 py-4">
+              <span class="mt-0.5 text-green-400 text-lg leading-none">✅</span>
+              <div>
+                <p class="text-sm font-semibold text-green-300">¡Confirmado!</p>
+                <p class="text-xs text-green-400/80 mt-0.5">
+                  Las nuevas páginas fueron agregadas exitosamente al sistema y serán escrapeadas en la próxima ejecución cron.
+                </p>
+              </div>
+            </div>
+            </div>
+          </div>
+        </div>
+      </section>
     </div>
 
     <!-- Supabase JS CDN -->
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+    <!-- SheetJS para parseo de archivos Excel/CSV -->
+    <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
 
     <script>
       // ─── Configuración de Supabase ────────────────────────────────────────
@@ -634,6 +800,209 @@
 
       function escapeHtml(str) {
         return String(str ?? "").replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;");
+      }
+
+      // ─── Expandir Fuentes ─────────────────────────────────────────────────
+
+      function _extractDomains(rawValues) {
+        const seen = new Set();
+        const domains = [];
+        for (const raw of rawValues) {
+          const str = String(raw ?? "").trim();
+          if (!str) continue;
+          try {
+            // Intentar parsear como URL completa
+            const url = str.startsWith("http") ? str : `https://${str}`;
+            const hostname = new URL(url).hostname.replace(/^www\./, "");
+            if (hostname && !seen.has(hostname)) {
+              seen.add(hostname);
+              domains.push(hostname);
+            }
+          } catch {
+            // Si no es URL válida, usar el texto limpio como dominio
+            const clean = str.replace(/^www\./, "").split("/")[0].toLowerCase();
+            if (clean && !seen.has(clean)) {
+              seen.add(clean);
+              domains.push(clean);
+            }
+          }
+        }
+        return domains;
+      }
+
+      function _renderDomainTags(domains) {
+        const tagsEl  = document.getElementById("sourcesTags");
+        const countEl = document.getElementById("sourcesCount");
+        const section = document.getElementById("sourcesResult");
+
+        // Guardar en variable global para que el botón "Validar" los use
+        window._lastParsedDomains = domains;
+
+        tagsEl.innerHTML = "";
+        countEl.textContent = `(${domains.length})`;
+
+        for (const domain of domains) {
+          const tag = document.createElement("span");
+          tag.textContent = domain;
+          tag.className = "px-2.5 py-1 rounded-full text-xs bg-gray-700 text-gray-300 select-all";
+          tagsEl.appendChild(tag);
+        }
+
+        // Ocultar panel de validación anterior si se vuelve a parsear
+        document.getElementById("validationPanel").classList.add("hidden");
+        document.getElementById("sourcesSuccessAlert").classList.add("hidden");
+        section.classList.remove("hidden");
+      }
+
+      async function handleSourceUpload(event) {
+        const file = event.target.files?.[0];
+        if (!file) return;
+
+        try {
+          const buffer = await file.arrayBuffer();
+          const workbook = XLSX.read(buffer, { type: "array" });
+          const sheet = workbook.Sheets[workbook.SheetNames[0]];
+          const rows = XLSX.utils.sheet_to_json(sheet, { header: 1 });
+
+          // Leer primera columna de cada fila (índice 0)
+          const rawValues = rows.map(row => row[0]).filter(Boolean);
+          const domains = _extractDomains(rawValues);
+          _renderDomainTags(domains);
+        } catch (err) {
+          console.error("[trovilo] Error al parsear archivo:", err);
+          alert("No se pudo leer el archivo. Asegurate de que sea un CSV o Excel válido.");
+        }
+      }
+
+      function handleManualUrls() {
+        const textarea = document.getElementById("manualUrls");
+        const lines = textarea.value.split("\n").map(l => l.trim()).filter(Boolean);
+        if (!lines.length) return;
+        const domains = _extractDomains(lines);
+        _renderDomainTags(domains);
+      }
+
+      // ─── Validar dominios contra Supabase ─────────────────────────────────
+
+      async function validateDomainsAgainstSystem(parsedDomains) {
+        if (!parsedDomains?.length) return;
+
+        const panel = document.getElementById("validationPanel");
+        panel.classList.remove("hidden");
+
+        // 1. Obtener dominios existentes de fuentes_scraper
+        let existingDomains = [];
+        try {
+          const { data, error } = await db.from("fuentes_scraper").select("domain");
+          if (!error && data) existingDomains = data.map(r => r.domain.toLowerCase());
+        } catch (e) {
+          console.warn("[trovilo] No se pudo leer fuentes_scraper:", e);
+        }
+
+        const existingSet = new Set(existingDomains);
+
+        // 2. Separar en grupos
+        const already = parsedDomains.filter(d => existingSet.has(d.toLowerCase()));
+        const newOnes  = parsedDomains.filter(d => !existingSet.has(d.toLowerCase()));
+
+        // 3. Renderizar "Ya en el sistema"
+        const alreadySection = document.getElementById("alreadyInSystem");
+        const alreadyTags    = document.getElementById("alreadyTags");
+        const alreadyCount   = document.getElementById("alreadyCount");
+
+        if (already.length) {
+          alreadyTags.innerHTML = "";
+          alreadyCount.textContent = `(${already.length})`;
+          for (const d of already) {
+            const tag = document.createElement("span");
+            tag.textContent = d;
+            tag.className = "px-2.5 py-1 rounded-full text-xs bg-green-900/40 text-green-400 border border-green-800";
+            alreadyTags.appendChild(tag);
+          }
+          alreadySection.classList.remove("hidden");
+        } else {
+          alreadySection.classList.add("hidden");
+        }
+
+        // 4. Renderizar tabla de nuevos dominios
+        const newSection = document.getElementById("newDomainsSection");
+        const newBody    = document.getElementById("newDomainsTableBody");
+        const newCount   = document.getElementById("newCount");
+
+        if (newOnes.length) {
+          newBody.innerHTML = "";
+          newCount.textContent = `(${newOnes.length})`;
+          document.getElementById("selectAllNew").checked = true;
+
+          for (const domain of newOnes) {
+            const tr = document.createElement("tr");
+            tr.innerHTML = `
+              <td class="px-3 py-2">
+                <label class="flex items-center gap-2 cursor-pointer">
+                  <input type="checkbox" class="new-domain-cb rounded bg-gray-700 border-gray-600 text-indigo-500"
+                    value="${escapeHtml(domain)}" checked />
+                  <span class="font-mono">${escapeHtml(domain)}</span>
+                </label>
+              </td>
+            `;
+            newBody.appendChild(tr);
+          }
+          newSection.classList.remove("hidden");
+        } else {
+          newSection.classList.add("hidden");
+        }
+      }
+
+      function toggleAllNewDomains(checked) {
+        document.querySelectorAll(".new-domain-cb").forEach(cb => cb.checked = checked);
+      }
+
+      async function saveSelectedDomains() {
+        const selected = [...document.querySelectorAll(".new-domain-cb:checked")]
+          .map(cb => ({ domain: cb.value }));
+
+        const msgEl = document.getElementById("saveDomainsMsg");
+        const btn   = document.getElementById("addSourcesBtn");
+
+        if (!selected.length) {
+          msgEl.textContent = "Seleccioná al menos un dominio.";
+          msgEl.className = "mt-2 text-xs text-center rounded-lg px-3 py-2 font-medium bg-red-900/50 text-red-300 border border-red-700";
+          msgEl.classList.remove("hidden");
+          return;
+        }
+
+        btn.disabled    = true;
+        btn.textContent = "Guardando…";
+        msgEl.classList.add("hidden");
+
+        try {
+          const { error } = await db.from("fuentes_scraper")
+            .upsert(selected, { onConflict: "domain" });
+
+          if (error) throw error;
+
+          // Ocultar tabla de selección y limpiar inputs
+          document.getElementById("newDomainsSection").classList.add("hidden");
+          document.getElementById("sourcesResult").classList.add("hidden");
+          const fileInput1 = document.getElementById("sourceFile");
+          const fileInput2 = document.getElementById("sourceFileInput");
+          if (fileInput1) fileInput1.value = "";
+          if (fileInput2) fileInput2.value = "";
+          window._lastParsedDomains = [];
+
+          // Mostrar alerta de éxito prominente
+          document.getElementById("sourcesSuccessAlert").classList.remove("hidden");
+
+          // Refrescar estado del sistema en segundo plano
+          validateDomainsAgainstSystem([]);
+
+        } catch (e) {
+          btn.disabled    = false;
+          btn.textContent = "Agregar fuentes seleccionadas";
+          msgEl.textContent = `❌ Error al guardar: ${e.message}`;
+          msgEl.className = "mt-2 text-xs text-center rounded-lg px-3 py-2 font-medium bg-red-900/50 text-red-300 border border-red-700";
+          msgEl.classList.remove("hidden");
+        }
       }
 
       filterForm.addEventListener("submit", async (e) => {
