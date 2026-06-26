@@ -19,8 +19,25 @@
     ════════════════════════════════════════════════════════════════════ -->
     <div
       id="loginView"
-      class="min-h-screen flex items-center justify-center px-4 fade"
+      class="min-h-screen flex flex-col fade"
     >
+      <!-- Header sticky — igual al del dashboard -->
+      <header class="sticky top-0 z-50 bg-gray-950/90 backdrop-blur border-b border-gray-800">
+        <div class="max-w-2xl mx-auto px-4 h-12 flex items-center justify-between">
+          <span class="text-sm font-semibold text-white tracking-tight">trovilo</span>
+          <button
+            onclick="handleLogout()"
+            class="text-xs text-zinc-400 border border-zinc-700 rounded-md px-3 py-1.5
+                   hover:bg-zinc-800 hover:text-zinc-200 hover:border-zinc-600
+                   focus:outline-none focus:ring-2 focus:ring-zinc-600
+                   transition"
+          >
+            Salir
+          </button>
+        </div>
+      </header>
+
+      <div class="flex-1 flex items-center justify-center px-4">
       <div class="w-full max-w-sm bg-gray-900 rounded-2xl shadow-xl p-8">
 
         <!-- Logo -->
@@ -34,7 +51,7 @@
 
           <div>
             <label for="loginEmail" class="block text-sm font-medium text-gray-300 mb-1">
-              Email
+              Usuario
             </label>
             <input
               type="email"
@@ -81,6 +98,7 @@
         <!-- Error de login -->
         <div id="loginError" class="hidden mt-4 text-xs text-red-400 text-center bg-red-900/30 border border-red-800 rounded-lg px-3 py-2"></div>
       </div>
+      </div><!-- /flex-1 wrapper -->
     </div>
 
     <!-- ═══════════════════════════════════════════════════════════════════
@@ -101,7 +119,7 @@
                    focus:outline-none focus:ring-2 focus:ring-zinc-600
                    transition"
           >
-            Cerrar sesión
+            Salir
           </button>
         </div>
       </header>
@@ -214,6 +232,25 @@
 
           <!-- Mensaje de estado -->
           <div id="statusMsg" class="mt-5 hidden text-sm text-center rounded-lg px-4 py-3 font-medium"></div>
+
+          <!-- Tabla de miembros del canal (visible tras guardado exitoso) -->
+          <div id="membersSection" class="hidden mt-6">
+            <h3 class="text-sm font-semibold text-gray-300 mb-3">👥 Miembros del canal</h3>
+            <div class="overflow-x-auto rounded-lg border border-gray-700">
+              <table class="w-full text-xs text-left">
+                <thead class="bg-gray-800 text-gray-400 uppercase tracking-wide">
+                  <tr>
+                    <th class="px-3 py-2">Usuario</th>
+                    <th class="px-3 py-2">Tecnologías</th>
+                    <th class="px-3 py-2">Modalidad</th>
+                    <th class="px-3 py-2">Ubicación</th>
+                  </tr>
+                </thead>
+                <tbody id="membersTableBody" class="divide-y divide-gray-700/50 text-gray-300">
+                </tbody>
+              </table>
+            </div>
+          </div>
         </div>
       </main>
     </div>
@@ -224,22 +261,26 @@
     <script>
       // ─── Configuración de Supabase ────────────────────────────────────────
       // Reemplazá estos valores con los de tu proyecto en supabase.com
-      const SUPABASE_URL     = "https://TU_PROJECT_ID.supabase.co";
+      const SUPABASE_URL      = "https://TU_PROJECT_ID.supabase.co";
       const SUPABASE_ANON_KEY = "TU_ANON_KEY";
+      // Link público del canal de Telegram donde se publicarán las ofertas
+      const TELEGRAM_CHANNEL_LINK = "https://t.me/TU_CANAL";
       // ──────────────────────────────────────────────────────────────────────
 
       const { createClient } = supabase;
       const db = createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
 
       // ─── Referencias al DOM ───────────────────────────────────────────────
-      const loginView    = document.getElementById("loginView");
-      const dashboardView = document.getElementById("dashboardView");
-      const loginForm    = document.getElementById("loginForm");
-      const loginError   = document.getElementById("loginError");
-      const loginBtn     = document.getElementById("loginBtn");
-      const filterForm   = document.getElementById("filterForm");
-      const submitBtn    = document.getElementById("submitBtn");
-      const statusMsg    = document.getElementById("statusMsg");
+      const loginView      = document.getElementById("loginView");
+      const dashboardView  = document.getElementById("dashboardView");
+      const loginForm      = document.getElementById("loginForm");
+      const loginError     = document.getElementById("loginError");
+      const loginBtn       = document.getElementById("loginBtn");
+      const filterForm     = document.getElementById("filterForm");
+      const submitBtn      = document.getElementById("submitBtn");
+      const statusMsg      = document.getElementById("statusMsg");
+      const membersSection = document.getElementById("membersSection");
+      const membersTableBody = document.getElementById("membersTableBody");
 
       // ─── Gestión de vistas ────────────────────────────────────────────────
 
@@ -255,6 +296,7 @@
         // Limpiar el formulario de filtros para no exponer datos de la sesión anterior
         filterForm.reset();
         statusMsg.classList.add("hidden");
+        membersSection.classList.add("hidden");
         loginView.classList.remove("hidden");
       }
 
@@ -311,7 +353,7 @@
       // ─── Formulario de filtros ────────────────────────────────────────────
 
       function showStatus(message, isError = false) {
-        statusMsg.textContent = message;
+        statusMsg.innerHTML = message;
         statusMsg.className = [
           "mt-5 text-sm text-center rounded-lg px-4 py-3 font-medium",
           isError
@@ -319,6 +361,36 @@
             : "bg-green-900/50 text-green-300 border border-green-700",
         ].join(" ");
         statusMsg.classList.remove("hidden");
+      }
+
+      // ─── Tabla de miembros ────────────────────────────────────────────────
+      const JOB_TYPE_LABELS = { remote: "Remoto", hybrid: "Híbrido", "on-site": "Presencial" };
+
+      async function loadMembersTable() {
+        const { data, error } = await db.from("search_filters").select("telegram_user, tech_stack, job_type, location");
+
+        membersTableBody.innerHTML = "";
+
+        if (error || !data?.length) {
+          membersTableBody.innerHTML = `<tr><td colspan="4" class="px-3 py-4 text-center text-gray-500">Sin miembros registrados.</td></tr>`;
+        } else {
+          for (const row of data) {
+            const tr = document.createElement("tr");
+            tr.innerHTML = `
+              <td class="px-3 py-2 font-mono">@${escapeHtml(row.telegram_user)}</td>
+              <td class="px-3 py-2">${escapeHtml(row.tech_stack)}</td>
+              <td class="px-3 py-2">${JOB_TYPE_LABELS[row.job_type] ?? row.job_type}</td>
+              <td class="px-3 py-2">${escapeHtml(row.location)}</td>
+            `;
+            membersTableBody.appendChild(tr);
+          }
+        }
+
+        membersSection.classList.remove("hidden");
+      }
+
+      function escapeHtml(str) {
+        return String(str ?? "").replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;");
       }
 
       filterForm.addEventListener("submit", async (e) => {
@@ -345,8 +417,16 @@
           console.error("[trovilo] Error al guardar:", error.message);
           showStatus("❌ No se pudo guardar. Revisá la consola para más detalles.", true);
         } else {
-          showStatus("✅ Criterios guardados correctamente.");
+          showStatus(
+            `✅ Criterios guardados correctamente.<br>
+             <span class="block mt-1 text-green-400/80">
+               Las ofertas aparecerán en el canal de Telegram:
+               <a href="${TELEGRAM_CHANNEL_LINK}" target="_blank" rel="noopener"
+                  class="underline hover:text-green-300 break-all">${TELEGRAM_CHANNEL_LINK}</a>
+             </span>`
+          );
           filterForm.reset();
+          loadMembersTable();
         }
 
         submitBtn.disabled    = false;
