@@ -7,8 +7,26 @@
     <script src="https://cdn.tailwindcss.com"></script>
     <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
     <style>
-      /* Transición de opacidad para el cambio login ↔ dashboard */
       .fade { transition: opacity 0.25s ease; }
+
+      /* Sidebar nav items */
+      .sidebar-nav-item {
+        color: #9ca3af; /* gray-400 */
+        text-align: left;
+      }
+      .sidebar-nav-item:hover {
+        background: rgba(255,255,255,0.06);
+        color: #fff;
+      }
+      .sidebar-nav-item.active {
+        background: rgba(99,102,241,0.15); /* indigo tint */
+        color: #a5b4fc; /* indigo-300 */
+      }
+
+      /* Scrollbar delgada para la lista de fuentes */
+      #fuentesList::-webkit-scrollbar { width: 4px; }
+      #fuentesList::-webkit-scrollbar-track { background: transparent; }
+      #fuentesList::-webkit-scrollbar-thumb { background: #374151; border-radius: 2px; }
     </style>
   </head>
 
@@ -103,416 +121,391 @@
     </div>
 
     <!-- ═══════════════════════════════════════════════════════════════════
-         VISTA: DASHBOARD
-         Oculta por defecto, visible tras autenticación exitosa
+         VISTA: DASHBOARD  — layout con sidebar izquierdo
     ════════════════════════════════════════════════════════════════════ -->
     <div id="dashboardView" class="hidden min-h-screen flex flex-col fade">
 
-      <!-- Header sticky con botón de logout -->
-      <header class="sticky top-0 z-50 bg-gray-950/90 backdrop-blur border-b border-gray-800">
-        <div class="max-w-2xl mx-auto px-4 h-12 flex items-center justify-between">
-          <span class="text-sm font-semibold text-white tracking-tight">trovilo</span>
-          <button
-            id="logoutBtn"
-            onclick="handleLogout()"
+      <!-- Header sticky -->
+      <header class="sticky top-0 z-50 bg-gray-950/95 backdrop-blur border-b border-gray-800/80">
+        <div class="px-5 h-13 flex items-center justify-between" style="height:52px">
+          <div class="flex items-center gap-3">
+            <!-- Botón hamburger (mobile) -->
+            <button onclick="toggleSidebar()" class="lg:hidden p-1.5 rounded-lg text-gray-400 hover:text-white hover:bg-gray-800 transition">
+              <svg class="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+                <path stroke-linecap="round" stroke-linejoin="round" d="M4 6h16M4 12h16M4 18h16"/>
+              </svg>
+            </button>
+            <span class="text-sm font-bold text-white tracking-tight">trovilo</span>
+          </div>
+          <button id="logoutBtn" onclick="handleLogout()"
             class="text-xs text-zinc-400 border border-zinc-700 rounded-md px-3 py-1.5
                    hover:bg-zinc-800 hover:text-zinc-200 hover:border-zinc-600
-                   focus:outline-none focus:ring-2 focus:ring-zinc-600
-                   transition"
-          >
+                   focus:outline-none focus:ring-2 focus:ring-zinc-600 transition">
             Salir
           </button>
         </div>
       </header>
 
-      <!-- Contenido del dashboard -->
-      <main class="flex-1 flex items-start justify-center px-4 py-10">
-        <div class="w-full max-w-md bg-gray-900 rounded-2xl shadow-xl p-8">
+      <!-- Body: sidebar + contenido -->
+      <div class="flex flex-1 overflow-hidden">
 
-          <!-- Encabezado -->
-          <div class="mb-8 text-center">
-            <h2 class="text-2xl font-bold text-white tracking-tight">Configurar búsqueda</h2>
-            <p class="mt-1 text-sm text-gray-400">Tus criterios para el scraper de empleos</p>
+        <!-- ─── Sidebar izquierdo ─────────────────────────────────── -->
+        <aside id="sidebar"
+          class="w-56 shrink-0 bg-gray-900 border-r border-gray-800 flex flex-col py-5 px-2
+                 lg:translate-x-0 transition-transform duration-200
+                 fixed lg:static inset-y-0 left-0 z-40 mt-[52px] lg:mt-0
+                 -translate-x-full lg:translate-x-0">
+
+          <p class="text-[10px] uppercase tracking-widest text-gray-600 px-3 mb-2">Menú</p>
+
+          <nav class="space-y-0.5">
+            <button id="navBusqueda" onclick="switchPanel('busqueda')"
+              class="sidebar-nav-item active w-full flex items-center gap-2.5 px-3 py-2.5 rounded-lg text-sm font-medium transition">
+              <span class="text-base leading-none">🔍</span>
+              Búsqueda
+            </button>
+            <button id="navFuentes" onclick="switchPanel('fuentes')"
+              class="sidebar-nav-item w-full flex items-center gap-2.5 px-3 py-2.5 rounded-lg text-sm font-medium transition">
+              <span class="text-base leading-none">🌐</span>
+              Fuentes
+            </button>
+          </nav>
+
+          <!-- Footer del sidebar -->
+          <div class="mt-auto px-3 pt-4 border-t border-gray-800">
+            <p class="text-[10px] text-gray-700 text-center">trovilo © 2025</p>
           </div>
+        </aside>
 
-          <!-- Formulario de filtros -->
-          <form id="filterForm" class="space-y-5" novalidate>
+        <!-- Overlay mobile -->
+        <div id="sidebarOverlay" onclick="toggleSidebar()"
+          class="hidden fixed inset-0 z-30 bg-black/50 lg:hidden"></div>
 
-            <!-- Tecnologías -->
-            <div>
-              <label for="tech_stack" class="block text-sm font-medium text-gray-300 mb-1">
-                Tecnologías
-              </label>
-              <input
-                type="text"
-                id="tech_stack"
-                name="tech_stack"
-                placeholder="ej. Python, FastAPI, PostgreSQL"
-                required
-                class="w-full rounded-lg bg-gray-800 border border-gray-700 text-white
-                       placeholder-gray-500 px-4 py-2.5 text-sm
-                       focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent
-                       transition"
-              />
-              <p class="mt-1 text-xs text-gray-500">Separadas por comas</p>
+        <!-- ─── Área de contenido principal ─────────────────────────── -->
+        <main class="flex-1 overflow-y-auto bg-gray-950">
 
-              <!-- Nube de tecnologías ya registradas -->
-              <div id="techCloud" class="hidden mt-3">
-                <p class="text-xs text-gray-500 mb-2">Ya buscadas por otros miembros <span class="text-gray-600">(clic para agregar)</span>:</p>
-                <div id="techTags" class="flex flex-wrap gap-1.5"></div>
-                <!-- Agregar nuevo tag -->
-                <div class="flex gap-2 mt-2">
-                  <input
-                    id="newTagInput"
-                    type="text"
-                    placeholder="Nuevo tag..."
-                    class="flex-1 rounded-lg bg-gray-800 border border-gray-700 text-white placeholder-gray-500 px-3 py-1.5 text-xs
-                           focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent transition"
-                  />
-                  <button
-                    type="button"
-                    onclick="addNewTag()"
-                    class="rounded-lg bg-gray-700 hover:bg-indigo-600 text-gray-300 hover:text-white text-xs px-3 py-1.5 transition"
-                  >
-                    + Agregar
+          <!-- ══ PANEL: BÚSQUEDA ══════════════════════════════════════ -->
+          <div id="panelBusqueda" class="max-w-xl mx-auto px-5 py-8">
+
+            <div class="mb-7">
+              <h2 class="text-xl font-bold text-white">Configurar búsqueda</h2>
+              <p class="mt-1 text-sm text-gray-400">Tus criterios para el scraper de empleos</p>
+            </div>
+
+            <div class="bg-gray-900 rounded-2xl shadow-xl p-7">
+
+              <!-- Formulario de filtros -->
+              <form id="filterForm" class="space-y-5" novalidate>
+
+                <!-- Tecnologías -->
+                <div>
+                  <label for="tech_stack" class="block text-sm font-medium text-gray-300 mb-1">Tecnologías</label>
+                  <input type="text" id="tech_stack" name="tech_stack"
+                    placeholder="ej. Python, FastAPI, PostgreSQL" required
+                    class="w-full rounded-lg bg-gray-800 border border-gray-700 text-white
+                           placeholder-gray-500 px-4 py-2.5 text-sm
+                           focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent transition"/>
+                  <p class="mt-1 text-xs text-gray-500">Separadas por comas</p>
+
+                  <div id="techCloud" class="hidden mt-3">
+                    <p class="text-xs text-gray-500 mb-2">Ya buscadas por otros miembros <span class="text-gray-600">(clic para agregar)</span>:</p>
+                    <div id="techTags" class="flex flex-wrap gap-1.5"></div>
+                    <div class="flex gap-2 mt-2">
+                      <input id="newTagInput" type="text" placeholder="Nuevo tag..."
+                        class="flex-1 rounded-lg bg-gray-800 border border-gray-700 text-white placeholder-gray-500
+                               px-3 py-1.5 text-xs focus:outline-none focus:ring-2 focus:ring-indigo-500 transition"/>
+                      <button type="button" onclick="addNewTag()"
+                        class="rounded-lg bg-gray-700 hover:bg-indigo-600 text-gray-300 hover:text-white text-xs px-3 py-1.5 transition">
+                        + Agregar
+                      </button>
+                    </div>
+                  </div>
+                </div>
+
+                <!-- Modalidad -->
+                <div>
+                  <label class="block text-sm font-medium text-gray-300 mb-2">Modalidad</label>
+                  <div class="flex gap-4">
+                    <label class="flex items-center gap-2 cursor-pointer text-sm text-gray-300">
+                      <input type="checkbox" name="job_type" value="remote"
+                        class="rounded bg-gray-800 border-gray-600 text-indigo-500 focus:ring-indigo-500 focus:ring-offset-gray-900"/>
+                      Remoto
+                    </label>
+                    <label class="flex items-center gap-2 cursor-pointer text-sm text-gray-300">
+                      <input type="checkbox" name="job_type" value="hybrid"
+                        class="rounded bg-gray-800 border-gray-600 text-indigo-500 focus:ring-indigo-500 focus:ring-offset-gray-900"/>
+                      Híbrido
+                    </label>
+                    <label class="flex items-center gap-2 cursor-pointer text-sm text-gray-300">
+                      <input type="checkbox" name="job_type" value="on-site"
+                        class="rounded bg-gray-800 border-gray-600 text-indigo-500 focus:ring-indigo-500 focus:ring-offset-gray-900"/>
+                      Presencial
+                    </label>
+                  </div>
+                  <p id="jobTypeError" class="mt-1 text-xs text-red-400 hidden">Seleccioná al menos una modalidad.</p>
+                </div>
+
+                <!-- Ubicación -->
+                <div>
+                  <label for="location" class="block text-sm font-medium text-gray-300 mb-1">Ubicación</label>
+                  <input type="text" id="location" name="location"
+                    placeholder="ej. Argentina, Buenos Aires" required
+                    class="w-full rounded-lg bg-gray-800 border border-gray-700 text-white
+                           placeholder-gray-500 px-4 py-2.5 text-sm
+                           focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent transition"/>
+                  <div class="flex flex-wrap gap-1.5 mt-2">
+                    <button type="button" onclick="setLocation('Argentina')"
+                      class="location-tag px-2.5 py-1 rounded-full text-xs bg-gray-700 text-gray-300 hover:bg-indigo-600 hover:text-white transition">Argentina</button>
+                    <button type="button" onclick="setLocation('Uruguay')"
+                      class="location-tag px-2.5 py-1 rounded-full text-xs bg-gray-700 text-gray-300 hover:bg-indigo-600 hover:text-white transition">Uruguay</button>
+                    <button type="button" onclick="setLocation('Latin America')"
+                      class="location-tag px-2.5 py-1 rounded-full text-xs bg-gray-700 text-gray-300 hover:bg-indigo-600 hover:text-white transition">Latin America</button>
+                    <button type="button" onclick="setLocation('Latam')"
+                      class="location-tag px-2.5 py-1 rounded-full text-xs bg-gray-700 text-gray-300 hover:bg-indigo-600 hover:text-white transition">Latam</button>
+                  </div>
+                </div>
+
+                <!-- Usuario Telegram -->
+                <div>
+                  <label for="telegram_user" class="block text-sm font-medium text-gray-300 mb-1">Usuario de Telegram</label>
+                  <div class="relative">
+                    <span class="absolute inset-y-0 left-3 flex items-center text-gray-500 text-sm select-none">@</span>
+                    <input type="text" id="telegram_user" name="telegram_user"
+                      placeholder="tuusuario" required
+                      class="w-full rounded-lg bg-gray-800 border border-gray-700 text-white
+                             placeholder-gray-500 pl-7 pr-4 py-2.5 text-sm
+                             focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent transition"/>
+                  </div>
+                  <p class="mt-1 text-xs text-gray-500">Sin el símbolo @</p>
+                </div>
+
+                <button type="submit" id="submitBtn"
+                  class="w-full rounded-lg bg-indigo-600 hover:bg-indigo-500 active:bg-indigo-700
+                         text-white font-semibold text-sm py-3
+                         focus:outline-none focus:ring-2 focus:ring-indigo-400 focus:ring-offset-2 focus:ring-offset-gray-900
+                         transition disabled:opacity-50 disabled:cursor-not-allowed">
+                  Guardar criterios
+                </button>
+              </form>
+
+              <div id="statusMsg" class="mt-5 hidden text-sm text-center rounded-lg px-4 py-3 font-medium"></div>
+
+              <!-- Tabla de miembros -->
+              <div id="membersSection" class="hidden mt-6">
+                <h3 class="text-sm font-semibold text-gray-300 mb-3">👥 Miembros del canal</h3>
+                <div class="overflow-x-auto rounded-lg border border-gray-700">
+                  <table class="w-full text-xs text-left">
+                    <thead class="bg-gray-800 text-gray-400 uppercase tracking-wide">
+                      <tr>
+                        <th class="px-3 py-2">Usuario</th>
+                        <th class="px-3 py-2">Tecnologías</th>
+                        <th class="px-3 py-2">Modalidad</th>
+                        <th class="px-3 py-2">Ubicación</th>
+                        <th class="px-3 py-2"></th>
+                      </tr>
+                    </thead>
+                    <tbody id="membersTableBody" class="divide-y divide-gray-700/50 text-gray-300"></tbody>
+                  </table>
+                </div>
+              </div>
+            </div><!-- /card búsqueda -->
+          </div><!-- /panelBusqueda -->
+
+          <!-- ══ PANEL: FUENTES ═══════════════════════════════════════ -->
+          <div id="panelFuentes" class="hidden max-w-4xl mx-auto px-5 py-8">
+
+            <div class="mb-7">
+              <h2 class="text-xl font-bold text-white">Fuentes de búsqueda</h2>
+              <p class="mt-1 text-sm text-gray-400">Dominios que el scraper visita en cada ejecución cron</p>
+            </div>
+
+            <div class="grid grid-cols-1 lg:grid-cols-2 gap-5 items-start">
+
+              <!-- ── Lista de fuentes activas ──────────────────────── -->
+              <div class="bg-gray-900 rounded-2xl shadow-xl p-5">
+                <div class="flex items-center justify-between mb-4">
+                  <h3 class="text-sm font-semibold text-white">Fuentes activas</h3>
+                  <span id="fuentesActiveCount" class="text-xs bg-indigo-900/60 text-indigo-300 border border-indigo-800/60 rounded-full px-2.5 py-0.5 font-semibold"></span>
+                </div>
+
+                <!-- Buscador -->
+                <input id="fuentesSearch" type="text" placeholder="Filtrar dominios…"
+                  oninput="filterFuentesList(this.value)"
+                  class="w-full rounded-lg bg-gray-800 border border-gray-700 text-white placeholder-gray-500
+                         px-3 py-1.5 text-xs mb-3 focus:outline-none focus:ring-2 focus:ring-indigo-500 transition"/>
+
+                <div id="fuentesList" class="space-y-1 max-h-96 overflow-y-auto pr-1">
+                  <p class="text-xs text-gray-500 text-center py-6">Cargando fuentes…</p>
+                </div>
+              </div>
+
+              <!-- ── Agregar fuentes (colapsable) ──────────────────── -->
+              <div class="bg-gray-900 rounded-2xl shadow-xl overflow-hidden">
+
+                <!-- Toggle header -->
+                <button type="button" onclick="toggleExpandirFuentes()"
+                  class="w-full flex items-center justify-between px-5 py-4 text-left hover:bg-gray-800/60 transition">
+                  <div class="flex items-center gap-2">
+                    <span class="text-base">➕</span>
+                    <div>
+                      <span class="text-sm font-semibold text-white">Agregar fuentes</span>
+                      <span class="ml-2 text-xs text-gray-500">(opcional)</span>
+                    </div>
+                  </div>
+                  <svg id="expandirChevron" class="w-4 h-4 text-gray-400 transition-transform duration-200"
+                    fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+                    <path stroke-linecap="round" stroke-linejoin="round" d="M19 9l-7 7-7-7"/>
+                  </svg>
+                </button>
+
+                <!-- Cuerpo colapsable -->
+                <div id="expandirFuentesBody" class="hidden border-t border-gray-800 px-5 pb-5">
+                  <p class="text-xs text-gray-400 mt-4 mb-4">
+                    Subí un CSV/Excel con URLs en la primera columna, o pegá las URLs manualmente.
+                  </p>
+
+                  <div class="mb-3">
+                    <label class="block text-xs text-gray-400 mb-1">Archivo CSV / Excel</label>
+                    <input type="file" id="sourceFileInput" accept=".csv,.xlsx,.xls"
+                      onchange="handleSourceUpload(event)"
+                      class="w-full text-xs text-gray-300 bg-gray-800 border border-gray-700 rounded-lg
+                             px-3 py-2 file:mr-3 file:py-1 file:px-3 file:rounded-md file:border-0
+                             file:text-xs file:font-semibold file:bg-indigo-600 file:text-white
+                             hover:file:bg-indigo-500 cursor-pointer transition"/>
+                  </div>
+
+                  <div class="mb-3">
+                    <label class="block text-xs text-gray-400 mb-1">O pegá URLs (una por línea)</label>
+                    <textarea id="manualUrls" rows="4"
+                      placeholder="https://jobs.example.com&#10;https://anotherboard.io/jobs"
+                      class="w-full rounded-lg bg-gray-800 border border-gray-700 text-white
+                             placeholder-gray-500 px-3 py-2 text-xs
+                             focus:outline-none focus:ring-2 focus:ring-indigo-500 transition resize-none"></textarea>
+                  </div>
+
+                  <button type="button" onclick="processManualSources()"
+                    class="w-full rounded-lg bg-gray-700 hover:bg-indigo-600 text-gray-300 hover:text-white
+                           text-xs font-semibold py-2 transition">
+                    Procesar URLs
                   </button>
-                </div>
-              </div>
-            </div>
 
-            <!-- Modalidad -->
-            <div>
-              <label class="block text-sm font-medium text-gray-300 mb-2">
-                Modalidad
+                  <!-- Dominios extraídos -->
+                  <div id="sourcesResult" class="hidden mt-4">
+                    <p class="text-xs text-gray-400 mb-2">
+                      Dominios extraídos <span id="sourcesCount" class="text-indigo-400 font-semibold"></span>:
+                    </p>
+                    <div id="sourcesTags" class="flex flex-wrap gap-1.5 mb-3"></div>
+                    <button type="button"
+                      onclick="validateDomainsAgainstSystem(window._lastParsedDomains || [])"
+                      class="rounded-lg bg-indigo-600 hover:bg-indigo-500 text-white text-xs font-semibold px-4 py-1.5 transition">
+                      Validar contra el sistema
+                    </button>
+                  </div>
+
+                  <!-- Panel de validación -->
+                  <div id="validationPanel" class="hidden mt-5 space-y-4">
+                    <div id="alreadyInSystem" class="hidden">
+                      <p class="text-xs text-gray-500 mb-1">✅ Ya en el sistema <span id="alreadyCount" class="text-green-400 font-semibold"></span></p>
+                      <div id="alreadyTags" class="flex flex-wrap gap-1.5"></div>
+                    </div>
+
+                    <div id="newDomainsSection" class="hidden">
+                      <p class="text-xs text-gray-400 mb-2">🆕 Nuevos <span id="newCount" class="text-yellow-400 font-semibold"></span></p>
+                      <div class="rounded-lg border border-gray-700 overflow-hidden">
+                        <table class="w-full text-xs">
+                          <thead class="bg-gray-800 text-gray-400">
+                            <tr>
+                              <th class="px-3 py-2 text-left">
+                                <label class="flex items-center gap-2 cursor-pointer">
+                                  <input type="checkbox" id="selectAllNew" checked
+                                    onchange="toggleAllNewDomains(this.checked)"
+                                    class="rounded bg-gray-700 border-gray-600 text-indigo-500"/>
+                                  Seleccionar todos
+                                </label>
+                              </th>
+                            </tr>
+                          </thead>
+                          <tbody id="newDomainsTableBody" class="divide-y divide-gray-700/50 text-gray-300"></tbody>
+                        </table>
+                      </div>
+                      <button id="addSourcesBtn" type="button" onclick="saveSelectedDomains()"
+                        class="mt-3 w-full rounded-lg bg-indigo-600 hover:bg-indigo-500 text-white
+                               text-xs font-semibold py-2 transition disabled:opacity-50">
+                        Agregar fuentes seleccionadas
+                      </button>
+                      <div id="saveDomainsMsg" class="hidden mt-2 text-xs text-center rounded-lg px-3 py-2 font-medium"></div>
+                    </div>
+
+                    <!-- Alerta de éxito -->
+                    <div id="sourcesSuccessAlert"
+                      class="hidden mt-4 flex items-start gap-3 rounded-xl border border-green-600/40 bg-green-900/30 px-4 py-4">
+                      <span class="mt-0.5 text-green-400 text-lg leading-none">✅</span>
+                      <div>
+                        <p class="text-sm font-semibold text-green-300">¡Confirmado!</p>
+                        <p class="text-xs text-green-400/80 mt-0.5">
+                          Las nuevas páginas fueron agregadas exitosamente al sistema y serán escrapeadas en la próxima ejecución cron.
+                        </p>
+                      </div>
+                    </div>
+                  </div>
+                </div><!-- /expandirFuentesBody -->
+              </div><!-- /agregar card -->
+
+            </div><!-- /grid -->
+          </div><!-- /panelFuentes -->
+
+        </main>
+      </div><!-- /flex body -->
+
+      <!-- Modal de edición -->
+      <div id="editModal" class="hidden fixed inset-0 z-50 flex items-center justify-center bg-black/60 px-4">
+        <div class="w-full max-w-sm bg-gray-900 rounded-2xl shadow-2xl p-6 space-y-4">
+          <h3 class="text-sm font-semibold text-white">Editar criterios</h3>
+          <input type="hidden" id="editId"/>
+
+          <div>
+            <label class="block text-xs text-gray-400 mb-1">Tecnologías</label>
+            <input id="editTech" type="text"
+              class="w-full rounded-lg bg-gray-800 border border-gray-700 text-white placeholder-gray-500 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"/>
+          </div>
+
+          <div>
+            <label class="block text-xs text-gray-400 mb-1">Modalidad</label>
+            <div class="flex gap-4">
+              <label class="flex items-center gap-1.5 cursor-pointer text-sm text-gray-300">
+                <input type="checkbox" class="edit-job-type rounded bg-gray-800 border-gray-600 text-indigo-500" value="remote"/> Remoto
               </label>
-              <div class="flex gap-4">
-                <label class="flex items-center gap-2 cursor-pointer text-sm text-gray-300">
-                  <input type="checkbox" name="job_type" value="remote"
-                    class="rounded bg-gray-800 border-gray-600 text-indigo-500 focus:ring-indigo-500 focus:ring-offset-gray-900" />
-                  Remoto
-                </label>
-                <label class="flex items-center gap-2 cursor-pointer text-sm text-gray-300">
-                  <input type="checkbox" name="job_type" value="hybrid"
-                    class="rounded bg-gray-800 border-gray-600 text-indigo-500 focus:ring-indigo-500 focus:ring-offset-gray-900" />
-                  Híbrido
-                </label>
-                <label class="flex items-center gap-2 cursor-pointer text-sm text-gray-300">
-                  <input type="checkbox" name="job_type" value="on-site"
-                    class="rounded bg-gray-800 border-gray-600 text-indigo-500 focus:ring-indigo-500 focus:ring-offset-gray-900" />
-                  Presencial
-                </label>
-              </div>
-              <p id="jobTypeError" class="mt-1 text-xs text-red-400 hidden">Seleccioná al menos una modalidad.</p>
-            </div>
-
-            <!-- Ubicación -->
-            <div>
-              <label for="location" class="block text-sm font-medium text-gray-300 mb-1">
-                Ubicación
+              <label class="flex items-center gap-1.5 cursor-pointer text-sm text-gray-300">
+                <input type="checkbox" class="edit-job-type rounded bg-gray-800 border-gray-600 text-indigo-500" value="hybrid"/> Híbrido
               </label>
-              <input
-                type="text"
-                id="location"
-                name="location"
-                placeholder="ej. Argentina, Buenos Aires"
-                required
-                class="w-full rounded-lg bg-gray-800 border border-gray-700 text-white
-                       placeholder-gray-500 px-4 py-2.5 text-sm
-                       focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent
-                       transition"
-              />
-              <!-- Sugerencias de ubicación -->
-              <div class="flex flex-wrap gap-1.5 mt-2">
-                <button type="button" onclick="setLocation('Argentina')"
-                  class="location-tag px-2.5 py-1 rounded-full text-xs bg-gray-700 text-gray-300 hover:bg-indigo-600 hover:text-white transition">
-                  Argentina
-                </button>
-                <button type="button" onclick="setLocation('Uruguay')"
-                  class="location-tag px-2.5 py-1 rounded-full text-xs bg-gray-700 text-gray-300 hover:bg-indigo-600 hover:text-white transition">
-                  Uruguay
-                </button>
-                <button type="button" onclick="setLocation('Latin America')"
-                  class="location-tag px-2.5 py-1 rounded-full text-xs bg-gray-700 text-gray-300 hover:bg-indigo-600 hover:text-white transition">
-                  Latin America
-                </button>
-                <button type="button" onclick="setLocation('Latam')"
-                  class="location-tag px-2.5 py-1 rounded-full text-xs bg-gray-700 text-gray-300 hover:bg-indigo-600 hover:text-white transition">
-                  Latam
-                </button>
-              </div>
-            </div>
-
-            <!-- Usuario de Telegram -->
-            <div>
-              <label for="telegram_user" class="block text-sm font-medium text-gray-300 mb-1">
-                Usuario de Telegram
+              <label class="flex items-center gap-1.5 cursor-pointer text-sm text-gray-300">
+                <input type="checkbox" class="edit-job-type rounded bg-gray-800 border-gray-600 text-indigo-500" value="on-site"/> Presencial
               </label>
-              <div class="relative">
-                <span class="absolute inset-y-0 left-3 flex items-center text-gray-500 text-sm select-none">@</span>
-                <input
-                  type="text"
-                  id="telegram_user"
-                  name="telegram_user"
-                  placeholder="tuusuario"
-                  required
-                  class="w-full rounded-lg bg-gray-800 border border-gray-700 text-white
-                         placeholder-gray-500 pl-7 pr-4 py-2.5 text-sm
-                         focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent
-                         transition"
-                />
-              </div>
-              <p class="mt-1 text-xs text-gray-500">Sin el símbolo @</p>
-            </div>
-
-            <!-- Botón guardar -->
-            <button
-              type="submit"
-              id="submitBtn"
-              class="w-full rounded-lg bg-indigo-600 hover:bg-indigo-500 active:bg-indigo-700
-                     text-white font-semibold text-sm py-3
-                     focus:outline-none focus:ring-2 focus:ring-indigo-400 focus:ring-offset-2 focus:ring-offset-gray-900
-                     transition disabled:opacity-50 disabled:cursor-not-allowed"
-            >
-              Guardar criterios
-            </button>
-          </form>
-
-          <!-- Mensaje de estado -->
-          <div id="statusMsg" class="mt-5 hidden text-sm text-center rounded-lg px-4 py-3 font-medium"></div>
-
-          <!-- Tabla de miembros del canal (visible tras guardado exitoso) -->
-          <div id="membersSection" class="hidden mt-6">
-            <h3 class="text-sm font-semibold text-gray-300 mb-3">👥 Miembros del canal</h3>
-            <div class="overflow-x-auto rounded-lg border border-gray-700">
-              <table class="w-full text-xs text-left">
-                <thead class="bg-gray-800 text-gray-400 uppercase tracking-wide">
-                  <tr>
-                    <th class="px-3 py-2">Usuario</th>
-                    <th class="px-3 py-2">Tecnologías</th>
-                    <th class="px-3 py-2">Modalidad</th>
-                    <th class="px-3 py-2">Ubicación</th>
-                    <th class="px-3 py-2"></th>
-                  </tr>
-                </thead>
-                <tbody id="membersTableBody" class="divide-y divide-gray-700/50 text-gray-300">
-                </tbody>
-              </table>
             </div>
           </div>
 
-          <!-- ── Expandir Fuentes ─────────────────────────────────────────── -->
-          <div class="mt-8 border-t border-gray-800 pt-6">
-            <h3 class="text-sm font-semibold text-gray-300 mb-1">🌐 Expandir Fuentes</h3>
-            <p class="text-xs text-gray-500 mb-4">
-              Subí un archivo CSV/Excel con URLs de job boards en la primera columna,
-              o pegá las URLs manualmente. Los dominios se agregarán a la búsqueda.
-            </p>
-
-            <!-- File input -->
-            <label class="block text-xs text-gray-400 mb-1">Archivo CSV / Excel</label>
-            <input
-              type="file"
-              id="sourceFile"
-              accept=".csv,.xlsx,.xls"
-              onchange="handleSourceUpload(event)"
-              class="block w-full text-xs text-gray-400 file:mr-3 file:py-1.5 file:px-3
-                     file:rounded-md file:border-0 file:text-xs file:font-medium
-                     file:bg-gray-700 file:text-gray-300 hover:file:bg-indigo-600 hover:file:text-white
-                     file:cursor-pointer cursor-pointer transition"
-            />
-
-            <!-- Textarea fallback -->
-            <label class="block text-xs text-gray-400 mt-4 mb-1">O pegá URLs manualmente (una por línea)</label>
-            <textarea
-              id="manualUrls"
-              rows="4"
-              placeholder="https://jobs.lever.co/empresa/job-id&#10;https://boards.greenhouse.io/empresa/jobs/123"
-              class="w-full rounded-lg bg-gray-800 border border-gray-700 text-white placeholder-gray-500
-                     px-3 py-2 text-xs focus:outline-none focus:ring-2 focus:ring-indigo-500 transition resize-none"
-            ></textarea>
-            <button
-              type="button"
-              onclick="handleManualUrls()"
-              class="mt-2 rounded-lg bg-gray-700 hover:bg-indigo-600 text-gray-300 hover:text-white
-                     text-xs px-4 py-1.5 transition"
-            >
-              Procesar URLs
-            </button>
-
-            <!-- Resultado de dominios extraídos -->
-            <div id="sourcesResult" class="hidden mt-4">
-              <p class="text-xs text-gray-400 mb-2">Dominios extraídos <span id="sourcesCount" class="text-indigo-400 font-semibold"></span>:</p>
-              <div id="sourcesTags" class="flex flex-wrap gap-1.5"></div>
-            </div>
+          <div>
+            <label class="block text-xs text-gray-400 mb-1">Ubicación</label>
+            <input id="editLocation" type="text"
+              class="w-full rounded-lg bg-gray-800 border border-gray-700 text-white placeholder-gray-500 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"/>
           </div>
 
-          <!-- Modal de edición -->
-          <div id="editModal" class="hidden fixed inset-0 z-50 flex items-center justify-center bg-black/60 px-4">
-            <div class="w-full max-w-sm bg-gray-900 rounded-2xl shadow-2xl p-6 space-y-4">
-              <h3 class="text-sm font-semibold text-white">Editar criterios</h3>
-              <input type="hidden" id="editId" />
+          <div id="editError" class="hidden text-xs text-red-400">Seleccioná al menos una modalidad.</div>
 
-              <div>
-                <label class="block text-xs text-gray-400 mb-1">Tecnologías</label>
-                <input id="editTech" type="text"
-                  class="w-full rounded-lg bg-gray-800 border border-gray-700 text-white placeholder-gray-500 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500" />
-              </div>
-
-              <div>
-                <label class="block text-xs text-gray-400 mb-1">Modalidad</label>
-                <div class="flex gap-4">
-                  <label class="flex items-center gap-1.5 cursor-pointer text-sm text-gray-300">
-                    <input type="checkbox" class="edit-job-type rounded bg-gray-800 border-gray-600 text-indigo-500" value="remote" /> Remoto
-                  </label>
-                  <label class="flex items-center gap-1.5 cursor-pointer text-sm text-gray-300">
-                    <input type="checkbox" class="edit-job-type rounded bg-gray-800 border-gray-600 text-indigo-500" value="hybrid" /> Híbrido
-                  </label>
-                  <label class="flex items-center gap-1.5 cursor-pointer text-sm text-gray-300">
-                    <input type="checkbox" class="edit-job-type rounded bg-gray-800 border-gray-600 text-indigo-500" value="on-site" /> Presencial
-                  </label>
-                </div>
-              </div>
-
-              <div>
-                <label class="block text-xs text-gray-400 mb-1">Ubicación</label>
-                <input id="editLocation" type="text"
-                  class="w-full rounded-lg bg-gray-800 border border-gray-700 text-white placeholder-gray-500 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500" />
-              </div>
-
-              <div id="editError" class="hidden text-xs text-red-400">Seleccioná al menos una modalidad.</div>
-
-              <div class="flex gap-3 pt-1">
-                <button id="editSaveBtn" onclick="saveEdit()"
-                  class="flex-1 rounded-lg bg-indigo-600 hover:bg-indigo-500 text-white text-sm font-semibold py-2 transition disabled:opacity-50">
-                  Guardar
-                </button>
-                <button onclick="closeEditModal()"
-                  class="flex-1 rounded-lg border border-gray-600 text-gray-300 hover:bg-gray-800 text-sm py-2 transition">
-                  Cancelar
-                </button>
-              </div>
-            </div>
+          <div class="flex gap-3 pt-1">
+            <button id="editSaveBtn" onclick="saveEdit()"
+              class="flex-1 rounded-lg bg-indigo-600 hover:bg-indigo-500 text-white text-sm font-semibold py-2 transition disabled:opacity-50">
+              Guardar
+            </button>
+            <button onclick="closeEditModal()"
+              class="flex-1 rounded-lg border border-gray-600 text-gray-300 hover:bg-gray-800 text-sm py-2 transition">
+              Cancelar
+            </button>
           </div>
         </div>
-      </main>
+      </div>
 
-      <!-- ═══════════════════════════════════════════════════════════════════
-           SECCIÓN: EXPANDIR FUENTES
-      ════════════════════════════════════════════════════════════════════ -->
-      <section class="w-full max-w-md mx-auto px-4 pb-10">
-        <div class="bg-gray-900 rounded-2xl shadow-xl p-6 mt-4">
-          <h3 class="text-sm font-semibold text-white mb-1">🔗 Expandir Fuentes</h3>
-          <p class="text-xs text-gray-400 mb-4">
-            Subí un archivo CSV/Excel con URLs de job boards en la primera columna,
-            o pegá las URLs manualmente abajo. Los dominios se agregarán a la lista de búsqueda.
-          </p>
-
-          <!-- File input -->
-          <div class="mb-3">
-            <label class="block text-xs text-gray-400 mb-1">Subir archivo (.csv, .xlsx)</label>
-            <input
-              type="file"
-              id="sourceFileInput"
-              accept=".csv,.xlsx,.xls"
-              onchange="handleSourceUpload(event)"
-              class="w-full text-xs text-gray-300 bg-gray-800 border border-gray-700 rounded-lg
-                     px-3 py-2 file:mr-3 file:py-1 file:px-3 file:rounded-md file:border-0
-                     file:text-xs file:font-semibold file:bg-indigo-600 file:text-white
-                     hover:file:bg-indigo-500 cursor-pointer transition"
-            />
-          </div>
-
-          <!-- Textarea fallback -->
-          <div class="mb-3">
-            <label class="block text-xs text-gray-400 mb-1">O pegá las URLs manualmente (una por línea)</label>
-            <textarea
-              id="sourceTextarea"
-              rows="4"
-              placeholder="https://jobs.example.com&#10;https://anotherboard.io/jobs"
-              class="w-full rounded-lg bg-gray-800 border border-gray-700 text-white
-                     placeholder-gray-500 px-3 py-2 text-xs
-                     focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent
-                     transition resize-none"
-            ></textarea>
-          </div>
-
-          <button
-            type="button"
-            onclick="processManualSources()"
-            class="w-full rounded-lg bg-indigo-600 hover:bg-indigo-500 text-white text-xs
-                   font-semibold py-2 transition"
-          >
-            Agregar URLs manuales
-          </button>
-
-          <!-- Resultado -->
-          <div id="sourcesResult" class="hidden mt-4">
-            <p class="text-xs text-gray-400 mb-2">Dominios extraídos <span id="sourcesCount" class="text-indigo-400 font-semibold"></span>:</p>
-            <div id="sourcesTags" class="flex flex-wrap gap-1.5 mb-3"></div>
-            <button
-              type="button"
-              onclick="validateDomainsAgainstSystem(window._lastParsedDomains || [])"
-              class="rounded-lg bg-indigo-600 hover:bg-indigo-500 text-white text-xs font-semibold px-4 py-1.5 transition"
-            >
-              Validar contra el sistema
-            </button>
-          </div>
-
-          <!-- Panel de validación -->
-          <div id="validationPanel" class="hidden mt-5 space-y-4">
-            <!-- Ya en el sistema -->
-            <div id="alreadyInSystem" class="hidden">
-              <p class="text-xs text-gray-500 mb-1">✅ Ya en el sistema <span id="alreadyCount" class="text-green-400 font-semibold"></span></p>
-              <div id="alreadyTags" class="flex flex-wrap gap-1.5"></div>
-            </div>
-
-            <!-- Nuevos dominios -->
-            <div id="newDomainsSection" class="hidden">
-              <p class="text-xs text-gray-400 mb-2">🆕 Nuevos dominios encontrados <span id="newCount" class="text-yellow-400 font-semibold"></span></p>
-              <div class="rounded-lg border border-gray-700 overflow-hidden">
-                <table class="w-full text-xs">
-                  <thead class="bg-gray-800 text-gray-400">
-                    <tr>
-                      <th class="px-3 py-2 text-left">
-                        <label class="flex items-center gap-2 cursor-pointer">
-                          <input type="checkbox" id="selectAllNew" checked
-                            onchange="toggleAllNewDomains(this.checked)"
-                            class="rounded bg-gray-700 border-gray-600 text-indigo-500" />
-                          Seleccionar todos
-                        </label>
-                      </th>
-                    </tr>
-                  </thead>
-                  <tbody id="newDomainsTableBody" class="divide-y divide-gray-700/50 text-gray-300">
-                  </tbody>
-                </table>
-              </div>
-              <button
-                id="addSourcesBtn"
-                type="button"
-                onclick="saveSelectedDomains()"
-                class="mt-3 w-full rounded-lg bg-indigo-600 hover:bg-indigo-500 text-white text-xs font-semibold py-2 transition disabled:opacity-50"
-              >
-                Agregar fuentes seleccionadas
-              </button>
-              <div id="saveDomainsMsg" class="hidden mt-2 text-xs text-center rounded-lg px-3 py-2 font-medium"></div>
-            </div>
-
-            <!-- Alerta de éxito (se muestra tras inserción exitosa) -->
-            <div id="sourcesSuccessAlert" class="hidden mt-4 flex items-start gap-3 rounded-xl border border-green-600/40 bg-green-900/30 px-4 py-4">
-              <span class="mt-0.5 text-green-400 text-lg leading-none">✅</span>
-              <div>
-                <p class="text-sm font-semibold text-green-300">¡Confirmado!</p>
-                <p class="text-xs text-green-400/80 mt-0.5">
-                  Las nuevas páginas fueron agregadas exitosamente al sistema y serán escrapeadas en la próxima ejecución cron.
-                </p>
-              </div>
-            </div>
-            </div>
-          </div>
-        </div>
-      </section>
-    </div>
+    </div><!-- /dashboardView -->
 
     <!-- Supabase JS CDN -->
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
@@ -550,16 +543,95 @@
         loginView.classList.add("hidden");
         dashboardView.classList.remove("hidden");
         loadTechCloud();
+        switchPanel("busqueda");
       }
 
       // Muestra el login y oculta el dashboard
       function showLogin() {
         dashboardView.classList.add("hidden");
-        // Limpiar el formulario de filtros para no exponer datos de la sesión anterior
         filterForm.reset();
         statusMsg.classList.add("hidden");
         membersSection.classList.add("hidden");
         loginView.classList.remove("hidden");
+      }
+
+      // ─── Sidebar: toggle mobile ───────────────────────────────────────────
+      function toggleSidebar() {
+        const sidebar  = document.getElementById("sidebar");
+        const overlay  = document.getElementById("sidebarOverlay");
+        const isOpen   = !sidebar.classList.contains("-translate-x-full");
+        sidebar.classList.toggle("-translate-x-full", isOpen);
+        overlay.classList.toggle("hidden", isOpen);
+      }
+
+      // ─── Panel switching ──────────────────────────────────────────────────
+      function switchPanel(name) {
+        // Panels
+        document.getElementById("panelBusqueda").classList.toggle("hidden", name !== "busqueda");
+        document.getElementById("panelFuentes").classList.toggle("hidden",  name !== "fuentes");
+
+        // Nav items active state
+        document.getElementById("navBusqueda").classList.toggle("active", name === "busqueda");
+        document.getElementById("navFuentes").classList.toggle("active",  name === "fuentes");
+
+        // Cargar fuentes al abrir el panel
+        if (name === "fuentes") loadFuentesList();
+
+        // Cerrar sidebar en mobile al seleccionar
+        const sidebar = document.getElementById("sidebar");
+        if (!sidebar.classList.contains("lg:static")) {
+          sidebar.classList.add("-translate-x-full");
+          document.getElementById("sidebarOverlay").classList.add("hidden");
+        }
+      }
+
+      // ─── Fuentes: cargar lista desde Supabase ─────────────────────────────
+      let _allFuentes = [];
+
+      async function loadFuentesList() {
+        const list      = document.getElementById("fuentesList");
+        const countEl   = document.getElementById("fuentesActiveCount");
+        list.innerHTML  = '<p class="text-xs text-gray-500 text-center py-6">Cargando…</p>';
+
+        try {
+          const { data, error } = await db.from("fuentes_scraper").select("id, domain").order("domain");
+          if (error) throw error;
+
+          _allFuentes = data || [];
+          countEl.textContent = `${_allFuentes.length} dominios`;
+          _renderFuentesList(_allFuentes);
+        } catch (e) {
+          list.innerHTML = `<p class="text-xs text-red-400 text-center py-4">Error: ${escapeHtml(e.message)}</p>`;
+        }
+      }
+
+      function _renderFuentesList(items) {
+        const list = document.getElementById("fuentesList");
+        if (!items.length) {
+          list.innerHTML = '<p class="text-xs text-gray-500 text-center py-6">No hay fuentes registradas.</p>';
+          return;
+        }
+        list.innerHTML = items.map(f => `
+          <div class="flex items-center justify-between gap-2 px-2 py-1.5 rounded-lg hover:bg-gray-800/60 group">
+            <div class="flex items-center gap-2 min-w-0">
+              <span class="w-1.5 h-1.5 rounded-full bg-indigo-500 shrink-0"></span>
+              <span class="text-xs text-gray-300 truncate font-mono">${escapeHtml(f.domain)}</span>
+            </div>
+            <button onclick="deleteFuente('${escapeHtml(f.id)}', '${escapeHtml(f.domain)}')"
+              class="opacity-0 group-hover:opacity-100 shrink-0 text-gray-600 hover:text-red-400 transition text-xs px-1"
+              title="Eliminar">✕</button>
+          </div>`).join("");
+      }
+
+      function filterFuentesList(query) {
+        const q = query.toLowerCase();
+        _renderFuentesList(q ? _allFuentes.filter(f => f.domain.includes(q)) : _allFuentes);
+      }
+
+      async function deleteFuente(id, domain) {
+        if (!confirm(`¿Eliminar "${domain}" de las fuentes?`)) return;
+        const { error } = await db.from("fuentes_scraper").delete().eq("id", id);
+        if (!error) loadFuentesList();
       }
 
       // ─── Verificar sesión activa al cargar la página ──────────────────────
@@ -804,6 +876,14 @@
 
       // ─── Expandir Fuentes ─────────────────────────────────────────────────
 
+      function toggleExpandirFuentes() {
+        const body    = document.getElementById("expandirFuentesBody");
+        const chevron = document.getElementById("expandirChevron");
+        const open    = !body.classList.contains("hidden");
+        body.classList.toggle("hidden", open);
+        chevron.style.transform = open ? "" : "rotate(180deg)";
+      }
+
       function _extractDomains(rawValues) {
         const seen = new Set();
         const domains = [];
@@ -881,6 +961,9 @@
         const domains = _extractDomains(lines);
         _renderDomainTags(domains);
       }
+
+      // Alias para el botón del HTML
+      function processManualSources() { handleManualUrls(); }
 
       // ─── Validar dominios contra Supabase ─────────────────────────────────
 
@@ -995,6 +1078,7 @@
 
           // Refrescar estado del sistema en segundo plano
           validateDomainsAgainstSystem([]);
+          loadFuentesList();
 
         } catch (e) {
           btn.disabled    = false;
