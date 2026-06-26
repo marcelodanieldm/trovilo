@@ -1,0 +1,4 @@
+supabase
+requests
+playwright
+python-dotenv

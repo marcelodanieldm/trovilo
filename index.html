@@ -1,0 +1,185 @@
+<!DOCTYPE html>
+<html lang="es">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Trovilo — Configurar búsqueda</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+  </head>
+
+  <body class="min-h-screen bg-gray-950 flex items-center justify-center px-4">
+    <div class="w-full max-w-md bg-gray-900 rounded-2xl shadow-xl p-8">
+
+      <!-- Encabezado -->
+      <div class="mb-8 text-center">
+        <h1 class="text-3xl font-bold text-white tracking-tight">trovilo</h1>
+        <p class="mt-1 text-sm text-gray-400">Configurá tus criterios de búsqueda de empleo</p>
+      </div>
+
+      <!-- Formulario -->
+      <form id="filterForm" class="space-y-5" novalidate>
+
+        <!-- Tecnologías -->
+        <div>
+          <label for="tech_stack" class="block text-sm font-medium text-gray-300 mb-1">
+            Tecnologías
+          </label>
+          <input
+            type="text"
+            id="tech_stack"
+            name="tech_stack"
+            placeholder="ej. Python, FastAPI, PostgreSQL"
+            required
+            class="w-full rounded-lg bg-gray-800 border border-gray-700 text-white
+                   placeholder-gray-500 px-4 py-2.5 text-sm
+                   focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent
+                   transition"
+          />
+          <p class="mt-1 text-xs text-gray-500">Separadas por comas</p>
+        </div>
+
+        <!-- Modalidad -->
+        <div>
+          <label for="job_type" class="block text-sm font-medium text-gray-300 mb-1">
+            Modalidad
+          </label>
+          <select
+            id="job_type"
+            name="job_type"
+            required
+            class="w-full rounded-lg bg-gray-800 border border-gray-700 text-white
+                   px-4 py-2.5 text-sm
+                   focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent
+                   transition appearance-none cursor-pointer"
+          >
+            <option value="" disabled selected>Seleccioná una modalidad</option>
+            <option value="remote">Remoto</option>
+            <option value="hybrid">Híbrido</option>
+            <option value="on-site">Presencial</option>
+          </select>
+        </div>
+
+        <!-- Ubicación -->
+        <div>
+          <label for="location" class="block text-sm font-medium text-gray-300 mb-1">
+            Ubicación
+          </label>
+          <input
+            type="text"
+            id="location"
+            name="location"
+            placeholder="ej. Argentina, Buenos Aires"
+            required
+            class="w-full rounded-lg bg-gray-800 border border-gray-700 text-white
+                   placeholder-gray-500 px-4 py-2.5 text-sm
+                   focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent
+                   transition"
+          />
+        </div>
+
+        <!-- Usuario de Telegram -->
+        <div>
+          <label for="telegram_user" class="block text-sm font-medium text-gray-300 mb-1">
+            Usuario de Telegram
+          </label>
+          <div class="relative">
+            <span class="absolute inset-y-0 left-3 flex items-center text-gray-500 text-sm select-none">@</span>
+            <input
+              type="text"
+              id="telegram_user"
+              name="telegram_user"
+              placeholder="tuusuario"
+              required
+              class="w-full rounded-lg bg-gray-800 border border-gray-700 text-white
+                     placeholder-gray-500 pl-7 pr-4 py-2.5 text-sm
+                     focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent
+                     transition"
+            />
+          </div>
+          <p class="mt-1 text-xs text-gray-500">Sin el símbolo @</p>
+        </div>
+
+        <!-- Botón de envío -->
+        <button
+          type="submit"
+          id="submitBtn"
+          class="w-full rounded-lg bg-indigo-600 hover:bg-indigo-500 active:bg-indigo-700
+                 text-white font-semibold text-sm py-3
+                 focus:outline-none focus:ring-2 focus:ring-indigo-400 focus:ring-offset-2 focus:ring-offset-gray-900
+                 transition disabled:opacity-50 disabled:cursor-not-allowed"
+        >
+          Guardar criterios
+        </button>
+      </form>
+
+      <!-- Mensaje de estado -->
+      <div id="statusMsg" class="mt-5 hidden text-sm text-center rounded-lg px-4 py-3 font-medium"></div>
+    </div>
+
+    <!-- Supabase JS CDN -->
+    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+
+    <script>
+      // ─── Configuración de Supabase ────────────────────────────────────────
+      // Reemplazá estos valores con los de tu proyecto en supabase.com
+      const SUPABASE_URL = "https://TU_PROJECT_ID.supabase.co";
+      const SUPABASE_ANON_KEY = "TU_ANON_KEY";
+      // ──────────────────────────────────────────────────────────────────────
+
+      const { createClient } = supabase;
+      const db = createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+
+      // Referencias al DOM
+      const form       = document.getElementById("filterForm");
+      const submitBtn  = document.getElementById("submitBtn");
+      const statusMsg  = document.getElementById("statusMsg");
+
+      // Muestra un mensaje de éxito o error debajo del formulario
+      function showStatus(message, isError = false) {
+        statusMsg.textContent = message;
+        statusMsg.className = [
+          "mt-5 text-sm text-center rounded-lg px-4 py-3 font-medium",
+          isError
+            ? "bg-red-900/50 text-red-300 border border-red-700"
+            : "bg-green-900/50 text-green-300 border border-green-700",
+        ].join(" ");
+        statusMsg.classList.remove("hidden");
+      }
+
+      // Maneja el envío del formulario
+      form.addEventListener("submit", async (e) => {
+        e.preventDefault();
+
+        const telegramRaw = document.getElementById("telegram_user").value.trim();
+
+        // Armar el objeto a insertar según el esquema de 'search_filters'
+        const payload = {
+          tech_stack:    document.getElementById("tech_stack").value.trim(),
+          job_type:      document.getElementById("job_type").value,
+          location:      document.getElementById("location").value.trim(),
+          // Guardar siempre sin '@' para mantener consistencia en la BD
+          telegram_user: telegramRaw.replace(/^@/, ""),
+        };
+
+        // Deshabilitar el botón mientras se guarda
+        submitBtn.disabled = true;
+        submitBtn.textContent = "Guardando...";
+        statusMsg.classList.add("hidden");
+
+        const { error } = await db.from("search_filters").insert(payload);
+
+        if (error) {
+          console.error("[trovilo] Error al guardar:", error.message);
+          showStatus("❌ No se pudo guardar. Revisá la consola para más detalles.", true);
+        } else {
+          showStatus("✅ Criterios guardados correctamente.");
+          form.reset();
+        }
+
+        // Restaurar el botón
+        submitBtn.disabled = false;
+        submitBtn.textContent = "Guardar criterios";
+      });
+    </script>
+  </body>
+</html>
