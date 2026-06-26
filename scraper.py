@@ -22,8 +22,9 @@ Funciones principales:
 import time
 import random
 import re
-from urllib.parse import quote_plus
+from urllib.parse import quote_plus, urlparse
 from playwright.sync_api import Page
+from query_builder import build_duckduckgo_query
 
 # Plataformas ATS objetivo
 ATS_DOMAINS = [
@@ -43,19 +44,6 @@ DDG_HTML_URL = "https://html.duckduckgo.com/html/"
 def _jitter(min_s: float = 2.0, max_s: float = 5.0) -> None:
     """Pausa aleatoria entre peticiones para evitar detección de bots."""
     time.sleep(random.uniform(min_s, max_s))
-
-
-# ---------------------------------------------------------------------------
-# Construcción y parseo de búsquedas
-# ---------------------------------------------------------------------------
-
-def _build_query(tech: str, location: str, job_type: str) -> str:
-    """
-    Arma la query combinando los dominios ATS con operadores OR y los
-    términos entre comillas para mayor precisión.
-    """
-    site_filter = " OR ".join(f"site:{d}" for d in ATS_DOMAINS)
-    return f'{site_filter} "{tech}" "{location}" "{job_type}"'
 
 
 def _extract_company(url: str) -> str:
@@ -80,9 +68,46 @@ def _clean_title(title: str) -> str:
     return title.strip()
 
 
-def _is_valid_ats_url(url: str) -> bool:
-    """Verifica que la URL pertenezca a uno de los dominios ATS objetivo."""
-    return any(domain in url for domain in ATS_DOMAINS)
+def is_valid_job_url(url: str) -> bool:
+    """
+    Valida que una URL sea un posting real de un ATS objetivo.
+
+    Reglas:
+      1. El dominio debe ser exactamente de greenhouse, lever o ashby.
+      2. No debe contener sub-páginas de privacidad, términos o ayuda.
+      3. Para lever.co, debe tener al menos 2 segmentos de path
+         (company + job-id) para no incluir páginas raíz de empresa.
+    """
+    try:
+        parsed = urlparse(url if url.startswith("http") else f"https://{url}")
+        hostname = parsed.netloc.lower()
+        path     = parsed.path.lower()
+
+        # Regla 1: dominio exacto de ATS
+        valid_domains = (
+            "boards.greenhouse.io",
+            "jobs.lever.co",
+            "jobs.ashbyhq.com",
+            "apply.workable.com",
+        )
+        if not any(hostname == d or hostname.endswith("." + d) for d in valid_domains):
+            return False
+
+        # Regla 2: descartar páginas de privacidad, términos y ayuda
+        blocked_paths = ("/privacy", "/terms", "/help", "/about", "/blog")
+        if any(path.startswith(p) for p in blocked_paths):
+            return False
+
+        # Regla 3: lever.co debe tener al menos company + job-id
+        if "lever.co" in hostname:
+            segments = [s for s in path.split("/") if s]
+            if len(segments) < 2:
+                return False
+
+        return True
+
+    except Exception:
+        return False
 
 
 def _extract_results_from_page(page, seen_urls: set) -> list[dict]:
@@ -101,7 +126,7 @@ def _extract_results_from_page(page, seen_urls: set) -> list[dict]:
                 url   = el.inner_text().strip()
                 title = ""
 
-            if not url or not _is_valid_ats_url(url):
+            if not url or not is_valid_job_url(url):
                 continue
             if url in seen_urls:
                 continue
@@ -143,7 +168,7 @@ def scrape_jobs_via_duckduckgo(
       4. Si existe el botón "Next" (.nav-link form), lo pulsa y extrae página 2
       5. Filtra solo URLs de dominios ATS y retorna lista de dicts
     """
-    query = _build_query(tech, location, job_type)
+    query = build_duckduckgo_query(tech, location, job_type)
     jobs: list[dict] = []
     seen_urls: set[str] = set()
 
