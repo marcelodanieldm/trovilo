@@ -20,6 +20,8 @@ Funciones principales:
       Útil para pruebas o ejecuciones únicas.
 """
 import time
+import random
+from playwright.sync_api import Page
 
 # Plataformas ATS objetivo — se usan como filtro site: en la búsqueda
 ATS_DOMAINS = [

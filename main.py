@@ -19,6 +19,9 @@ Uso:
 Programado vía GitHub Actions (ver .github/workflows/scraper.yml).
 """
 import os
+from dotenv import load_dotenv
+from playwright.sync_api import sync_playwright
+from browser import get_stealth_page
 from scraper import scrape_ats_with_page
 from notifier import supabase, process_and_notify, notify_no_results
 

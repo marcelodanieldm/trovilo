@@ -23,6 +23,11 @@ Variables de entorno requeridas:
   TELEGRAM_BOT_TOKEN, TELEGRAM_CHAT_ID
 """
 import os
+import requests
+from dotenv import load_dotenv
+from supabase import create_client, Client
+
+load_dotenv()
 
 # ---------------------------------------------------------------------------
 # Inicialización del cliente de Supabase
@@ -84,6 +89,11 @@ def _guardar_oferta(job: dict) -> None:
 
 # Caracteres especiales que MarkdownV2 de Telegram exige escapar
 _MDV2_SPECIAL = r"_*[]()~`>#+-=|{}.!"
+
+
+def _format_usuarios(users: list[str]) -> str:
+    """Formatea una lista de usuarios de Telegram como menciones escapadas."""
+    return ", ".join(f"@{_escape_mdv2(u.lstrip('@'))}" for u in users)
 
 
 def _escape_mdv2(text: str) -> str:
