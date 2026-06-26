@@ -154,6 +154,29 @@
                        transition"
               />
               <p class="mt-1 text-xs text-gray-500">Separadas por comas</p>
+
+              <!-- Nube de tecnologías ya registradas -->
+              <div id="techCloud" class="hidden mt-3">
+                <p class="text-xs text-gray-500 mb-2">Ya buscadas por otros miembros <span class="text-gray-600">(clic para agregar)</span>:</p>
+                <div id="techTags" class="flex flex-wrap gap-1.5"></div>
+                <!-- Agregar nuevo tag -->
+                <div class="flex gap-2 mt-2">
+                  <input
+                    id="newTagInput"
+                    type="text"
+                    placeholder="Nuevo tag..."
+                    class="flex-1 rounded-lg bg-gray-800 border border-gray-700 text-white placeholder-gray-500 px-3 py-1.5 text-xs
+                           focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent transition"
+                  />
+                  <button
+                    type="button"
+                    onclick="addNewTag()"
+                    class="rounded-lg bg-gray-700 hover:bg-indigo-600 text-gray-300 hover:text-white text-xs px-3 py-1.5 transition"
+                  >
+                    + Agregar
+                  </button>
+                </div>
+              </div>
             </div>
 
             <!-- Modalidad -->
@@ -341,6 +364,7 @@
       function showDashboard() {
         loginView.classList.add("hidden");
         dashboardView.classList.remove("hidden");
+        loadTechCloud();
       }
 
       // Muestra el login y oculta el dashboard
@@ -415,6 +439,78 @@
         ].join(" ");
         statusMsg.classList.remove("hidden");
       }
+
+      // ─── Nube de tecnologías ──────────────────────────────────────────────
+
+      async function loadTechCloud() {
+        const { data, error } = await db.from("search_filters").select("tech_stack");
+        if (error || !data?.length) return;
+
+        // Extraer, normalizar y deduplicar todas las tecnologías
+        const allTechs = data
+          .flatMap(row => (row.tech_stack ?? "").split(","))
+          .map(t => t.trim())
+          .filter(Boolean);
+        const unique = [...new Set(allTechs.map(t => t.toLowerCase()))]
+          .map(t => allTechs.find(o => o.toLowerCase() === t)); // preservar casing original
+
+        if (!unique.length) return;
+
+        const tagsContainer = document.getElementById("techTags");
+        tagsContainer.innerHTML = "";
+
+        for (const tech of unique.sort()) {
+          const btn = document.createElement("button");
+          btn.type = "button";
+          btn.textContent = tech;
+          btn.className = "px-2.5 py-1 rounded-full text-xs bg-gray-700 text-gray-300 hover:bg-indigo-600 hover:text-white transition";
+          btn.onclick = () => addTechTag(tech);
+          tagsContainer.appendChild(btn);
+        }
+
+        document.getElementById("techCloud").classList.remove("hidden");
+      }
+
+      function addTechTag(tech) {
+        const input = document.getElementById("tech_stack");
+        const current = input.value.trim();
+        const existing = current.split(",").map(t => t.trim().toLowerCase()).filter(Boolean);
+        if (!existing.includes(tech.toLowerCase())) {
+          input.value = current ? `${current}, ${tech}` : tech;
+        }
+        input.focus();
+      }
+
+      function addNewTag() {
+        const newTagInput = document.getElementById("newTagInput");
+        const tech = newTagInput.value.trim();
+        if (!tech) return;
+
+        // Agregar al campo de tecnologías
+        addTechTag(tech);
+
+        // Agregar visualmente a la nube si no existe ya
+        const tagsContainer = document.getElementById("techTags");
+        const existing = [...tagsContainer.querySelectorAll("button")]
+          .map(b => b.textContent.toLowerCase());
+
+        if (!existing.includes(tech.toLowerCase())) {
+          const btn = document.createElement("button");
+          btn.type = "button";
+          btn.textContent = tech;
+          btn.className = "px-2.5 py-1 rounded-full text-xs bg-indigo-700 text-indigo-200 hover:bg-indigo-600 hover:text-white transition";
+          btn.onclick = () => addTechTag(tech);
+          tagsContainer.appendChild(btn);
+        }
+
+        newTagInput.value = "";
+        newTagInput.focus();
+      }
+
+      // Permitir agregar con Enter en el input de nuevo tag
+      document.getElementById("newTagInput")?.addEventListener("keydown", (e) => {
+        if (e.key === "Enter") { e.preventDefault(); addNewTag(); }
+      });
 
       // ─── Tabla de miembros ────────────────────────────────────────────────
       const JOB_TYPE_LABELS = { remote: "Remoto", hybrid: "Híbrido", "on-site": "Presencial" };
