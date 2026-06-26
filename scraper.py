@@ -21,6 +21,7 @@ Funciones principales:
 """
 import time
 import random
+from urllib.parse import quote_plus
 from playwright.sync_api import Page
 
 # Plataformas ATS objetivo — se usan como filtro site: en la búsqueda

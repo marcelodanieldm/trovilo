@@ -220,6 +220,25 @@
                        focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent
                        transition"
               />
+              <!-- Sugerencias de ubicación -->
+              <div class="flex flex-wrap gap-1.5 mt-2">
+                <button type="button" onclick="setLocation('Argentina')"
+                  class="location-tag px-2.5 py-1 rounded-full text-xs bg-gray-700 text-gray-300 hover:bg-indigo-600 hover:text-white transition">
+                  Argentina
+                </button>
+                <button type="button" onclick="setLocation('Uruguay')"
+                  class="location-tag px-2.5 py-1 rounded-full text-xs bg-gray-700 text-gray-300 hover:bg-indigo-600 hover:text-white transition">
+                  Uruguay
+                </button>
+                <button type="button" onclick="setLocation('Latin America')"
+                  class="location-tag px-2.5 py-1 rounded-full text-xs bg-gray-700 text-gray-300 hover:bg-indigo-600 hover:text-white transition">
+                  Latin America
+                </button>
+                <button type="button" onclick="setLocation('Latam')"
+                  class="location-tag px-2.5 py-1 rounded-full text-xs bg-gray-700 text-gray-300 hover:bg-indigo-600 hover:text-white transition">
+                  Latam
+                </button>
+              </div>
             </div>
 
             <!-- Usuario de Telegram -->
@@ -469,6 +488,17 @@
         }
 
         document.getElementById("techCloud").classList.remove("hidden");
+      }
+
+      function setLocation(value) {
+        document.getElementById("location").value = value;
+        // Resaltar el tag seleccionado
+        document.querySelectorAll(".location-tag").forEach(btn => {
+          btn.classList.toggle("bg-indigo-600", btn.textContent.trim() === value);
+          btn.classList.toggle("text-white",    btn.textContent.trim() === value);
+          btn.classList.toggle("bg-gray-700",   btn.textContent.trim() !== value);
+          btn.classList.toggle("text-gray-300",  btn.textContent.trim() !== value);
+        });
       }
 
       function addTechTag(tech) {
