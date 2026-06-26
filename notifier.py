@@ -6,11 +6,13 @@ por Telegram usando MarkdownV2.
 
 Responsabilidades:
   1. Cliente Supabase compartido (instanciado al importar el módulo).
-  2. Verificación de duplicados contra la tabla `sent_jobs`.
-  3. Inserción de nuevas ofertas en `sent_jobs`.
-  4. Construcción y envío de mensajes MarkdownV2 al Bot API de Telegram.
+  2. bulk_filter_and_save(jobs_list) — upsert masivo + detección de nuevas.
+  3. Construcción y envío de mensajes MarkdownV2 con rate-limit de 1 msg/s.
 
 Funciones públicas:
+  bulk_filter_and_save(jobs_list)
+      Upsert masivo en sent_jobs; retorna solo las ofertas realmente nuevas.
+
   process_and_notify(jobs, users, tech, location)
       Filtra duplicados, persiste en Supabase y notifica a todos los
       usuarios cuyos filtros coincidieron con cada oferta.
@@ -23,11 +25,15 @@ Variables de entorno requeridas:
   TELEGRAM_BOT_TOKEN, TELEGRAM_CHAT_ID
 """
 import os
+import time
+import logging
 import requests
 from dotenv import load_dotenv
 from supabase import create_client, Client
 
 load_dotenv()
+
+log = logging.getLogger("notifier")
 
 # ---------------------------------------------------------------------------
 # Inicialización del cliente de Supabase
@@ -51,14 +57,67 @@ supabase: Client = _get_supabase_client()
 
 
 # ---------------------------------------------------------------------------
-# Comprobación de duplicados
+# Deduplicación y persistencia masiva
+# ---------------------------------------------------------------------------
+
+def bulk_filter_and_save(jobs_list: list[dict]) -> list[dict]:
+    """
+    Upsert masivo de ofertas en 'sent_jobs' y retorna solo las nuevas.
+
+    Estrategia:
+      1. Consulta qué URLs ya existen en sent_jobs (una sola query).
+      2. Filtra el jobs_list para quedarse solo con las URLs nuevas.
+      3. Hace un upsert en bloque sobre las nuevas (on_conflict='job_url').
+      4. Retorna la lista de ofertas que realmente se insertaron por primera vez.
+
+    Parámetros:
+        jobs_list -- lista de dicts con claves 'title', 'company', 'url'
+    """
+    if not jobs_list:
+        return []
+
+    # Normalizar: el campo en BD es job_url pero el dict viene con 'url'
+    urls = [j["url"] for j in jobs_list if j.get("url")]
+
+    # 1. Obtener URLs ya conocidas en un solo SELECT
+    try:
+        existing = (
+            supabase.table("sent_jobs")
+            .select("job_url")
+            .in_("job_url", urls)
+            .execute()
+        )
+        known_urls = {row["job_url"] for row in (existing.data or [])}
+    except Exception as e:
+        log.error("Error consultando sent_jobs: %s", e)
+        known_urls = set()
+
+    # 2. Filtrar solo ofertas nuevas
+    new_jobs = [j for j in jobs_list if j.get("url") and j["url"] not in known_urls]
+
+    if not new_jobs:
+        log.info("Sin ofertas nuevas para persistir.")
+        return []
+
+    # 3. Upsert masivo
+    records = [
+        {"job_url": j["url"], "title": j.get("title", ""), "company": j.get("company", "")}
+        for j in new_jobs
+    ]
+    try:
+        supabase.table("sent_jobs").upsert(records, on_conflict="job_url").execute()
+        log.info("Upsert masivo: %d ofertas nuevas guardadas.", len(records))
+    except Exception as e:
+        log.error("Error en upsert masivo: %s", e)
+
+    return new_jobs
+
+
+# ---------------------------------------------------------------------------
+# Comprobación individual (compatibilidad con process_and_notify legacy)
 # ---------------------------------------------------------------------------
 
 def _ya_enviado(job_url: str) -> bool:
-    """
-    Consulta la tabla 'sent_jobs' para verificar si la oferta ya fue enviada.
-    Devuelve True si existe un registro con esa URL, False si es nueva.
-    """
     resultado = (
         supabase.table("sent_jobs")
         .select("id")
@@ -66,21 +125,6 @@ def _ya_enviado(job_url: str) -> bool:
         .execute()
     )
     return len(resultado.data) > 0
-
-
-# ---------------------------------------------------------------------------
-# Inserción en Supabase
-# ---------------------------------------------------------------------------
-
-def _guardar_oferta(job: dict) -> None:
-    """Inserta una nueva oferta en la tabla 'sent_jobs'."""
-    supabase.table("sent_jobs").insert(
-        {
-            "job_url": job["url"],
-            "title":   job["title"],
-            "company": job["company"],
-        }
-    ).execute()
 
 
 # ---------------------------------------------------------------------------
@@ -97,21 +141,12 @@ def _format_usuarios(users: list[str]) -> str:
 
 
 def _escape_mdv2(text: str) -> str:
-    """
-    Escapa todos los caracteres especiales de MarkdownV2 de Telegram.
-    Sin esto, la API devuelve 400 Bad Request si el texto tiene guiones,
-    puntos, paréntesis u otros caracteres reservados.
-    """
     for char in _MDV2_SPECIAL:
         text = text.replace(char, f"\\{char}")
     return text
 
 
 def _escape_url(url: str) -> str:
-    """
-    En el segmento URL de un enlace MarkdownV2 [texto](url)
-    sólo hay que escapar '\\' y ')' para no romper el parser.
-    """
     return url.replace("\\", "\\\\").replace(")", "\\)")
 
 
@@ -121,18 +156,10 @@ def _construir_mensaje(
     tech: str,
     location: str,
 ) -> str:
-    """
-    Arma el mensaje en MarkdownV2 para enviar por Telegram.
-    Usa un bloque de cita (>) para destacar los detalles de la oferta.
-    Todos los valores dinámicos se escapan con _escape_mdv2.
-    """
-    # Normalizar usuario: sin '@' para el escape, luego reinsertamos '@'
     usuario = telegram_user.lstrip("@")
-
-    # Escapar todos los campos de texto libre
     titulo  = _escape_mdv2(job.get("title",   "Sin título"))
     empresa = _escape_mdv2(job.get("company", "Desconocida"))
-    filtro  = _escape_mdv2(f"{tech} \u2013 {location}")  # – = en-dash, menos conflictos
+    filtro  = _escape_mdv2(f"{tech} \u2013 {location}")
     user_e  = _escape_mdv2(usuario)
     url_e   = _escape_url(job.get("url", ""))
 
@@ -146,12 +173,12 @@ def _construir_mensaje(
         f"> \U0001f517 [Ver Oferta]({url_e})"
     )
 
+
 def _construir_mensaje_sin_resultados(
     telegram_user: str,
     tech: str,
     location: str,
 ) -> str:
-    """Arma el mensaje MarkdownV2 para notificar que no se encontraron ofertas."""
     destinatario = _format_usuarios([telegram_user])
     filtro = _escape_mdv2(f"{tech} \u2013 {location}")
 
@@ -162,10 +189,11 @@ def _construir_mensaje_sin_resultados(
         "> No se encontraron ofertas nuevas para este criterio\."
     )
 
+
 def _enviar_telegram(mensaje: str) -> None:
     """
     Envía un mensaje al chat de Telegram configurado usando el Bot API.
-    Usa parse_mode MarkdownV2 y habilita la vista previa del enlace.
+    Lanza excepción en caso de error HTTP para que el llamador lo maneje.
     """
     token   = os.environ.get("TELEGRAM_BOT_TOKEN")
     chat_id = os.environ.get("TELEGRAM_CHAT_ID")
@@ -186,26 +214,21 @@ def _enviar_telegram(mensaje: str) -> None:
         },
         timeout=10,
     )
-
-    # Lanzar excepción si el servidor de Telegram devuelve un error HTTP
     respuesta.raise_for_status()
 
 
 # ---------------------------------------------------------------------------
-# Función principal
+# Funciones públicas
 # ---------------------------------------------------------------------------
 
 def notify_no_results(telegram_user: str, tech: str, location: str) -> None:
-    """
-    Envía un mensaje de Telegram informando que no se encontraron
-    ofertas nuevas para el filtro indicado.
-    """
+    """Notifica al usuario que no se encontraron ofertas nuevas."""
     try:
         mensaje = _construir_mensaje_sin_resultados(telegram_user, tech, location)
         _enviar_telegram(mensaje)
-        print(f"[notifier] Sin resultados notificado a '{telegram_user}'.")
+        log.info("Sin resultados notificado a '%s'.", telegram_user)
     except Exception as e:
-        print(f"[notifier] Error al enviar aviso sin resultados: {e}")
+        log.error("Error al enviar aviso sin resultados: %s", e)
 
 
 def process_and_notify(
@@ -215,11 +238,9 @@ def process_and_notify(
     location: str = "",
 ) -> None:
     """
-    Procesa una lista de ofertas de trabajo:
-      1. Verifica si la URL ya existe en 'sent_jobs' (evita duplicados).
-      2. Si es nueva, la inserta en Supabase.
-      3. Envía una notificación MarkdownV2 mencionando a todos los usuarios
-         cuyos filtros coincidieron con la oferta.
+    Filtra duplicados con bulk_filter_and_save, luego envía una notificación
+    por cada oferta nueva con sleep(1) entre mensajes para respetar el
+    rate-limit de Telegram (máx. 30 msg/s → 1 msg/s es conservador y seguro).
 
     Parámetros:
         jobs     -- lista de dicts con claves 'title', 'company', 'url'
@@ -227,24 +248,23 @@ def process_and_notify(
         tech     -- stack tecnológico del filtro
         location -- ubicación del filtro
     """
-    for job in jobs:
-        job_url = job.get("url", "").strip()
+    # Upsert masivo: retorna solo las que no existían
+    new_jobs = bulk_filter_and_save(jobs)
 
-        if not job_url:
-            continue
+    if not new_jobs:
+        log.info("Todas las ofertas ya habían sido enviadas.")
+        return
 
-        if _ya_enviado(job_url):
-            print(f"[notifier] Duplicado omitido: {job_url}")
-            continue
+    log.info("%d oferta(s) nuevas a notificar.", len(new_jobs))
 
-        try:
-            _guardar_oferta(job)
-
-            mensaje = _construir_mensaje(job, users, tech, location)
-            _enviar_telegram(mensaje)
-
-            nombres = ", ".join(u.lstrip("@") for u in users)
-            print(f"[notifier] Notificado a {nombres}: {job['title']} — {job['company']}")
-
-        except Exception as e:
-            print(f"[notifier] Error al procesar '{job_url}': {e}")
+    for job in new_jobs:
+        # Notificar a cada usuario con rate-limit
+        for user in users:
+            try:
+                mensaje = _construir_mensaje(job, user, tech, location)
+                _enviar_telegram(mensaje)
+                log.info("Notificado a @%s: %s — %s", user.lstrip("@"), job.get("title"), job.get("company"))
+                # Rate-limit: 1 mensaje por segundo (seguro frente al límite de Telegram)
+                time.sleep(1)
+            except Exception as e:
+                log.error("Error notificando a '%s' para '%s': %s", user, job.get("url"), e)

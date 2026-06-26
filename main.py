@@ -1,128 +1,157 @@
 """
 main.py
 -------
-Punto de entrada principal de trovilo.
+Orquestador principal de trovilo — scraper masivo de ofertas de trabajo.
 
 Flujo de ejecución:
   1. Carga variables de entorno desde `.env`.
-  2. Lee todos los filtros de búsqueda activos desde Supabase (`search_filters`).
-  3. Abre una única instancia del navegador stealth (Playwright + Chromium).
-  4. Para cada filtro, ejecuta el scraping de ofertas en plataformas ATS.
-  5. Agrupa las ofertas por URL: si una misma oferta coincide con los
-     filtros de varios usuarios, se genera un único mensaje de Telegram
-     mencionando a todos ellos.
-  6. Envía notificaciones vía Telegram y persiste las ofertas en Supabase.
+  2. Configura logging con timestamps limpios.
+  3. Descarga los filtros activos desde Supabase (`search_filters`).
+  4. Abre una única instancia del navegador stealth (Playwright + Chromium).
+  5. Por cada filtro activo:
+       a. Ejecuta run_massive_scraping() sobre todos los lotes de dominios.
+       b. Llama a bulk_filter_and_save() para deduplicar y persistir en Supabase.
+       c. Dispara alertas de Telegram con rate-limit de 1 msg/s.
+  6. Cierra el navegador en un bloque `finally`, incluso si ocurre un error.
 
 Uso:
     python main.py
 
 Programado vía GitHub Actions (ver .github/workflows/scraper.yml).
 """
-import os
+import logging
 from dotenv import load_dotenv
 from playwright.sync_api import sync_playwright
 from browser import get_stealth_page
-from scraper import scrape_ats_with_page
-from notifier import supabase, process_and_notify, notify_no_results
+from scraper import run_massive_scraping
+from notifier import supabase, bulk_filter_and_save, process_and_notify, notify_no_results
 
-# Cargar las variables de entorno desde el archivo .env
+# ---------------------------------------------------------------------------
+# Configuración global de logging
+# ---------------------------------------------------------------------------
+
+logging.basicConfig(
+    level=logging.INFO,
+    format="[%(asctime)s] %(levelname)s  %(name)s — %(message)s",
+    datefmt="%Y-%m-%d %H:%M:%S",
+)
+log = logging.getLogger("main")
+
+# ---------------------------------------------------------------------------
+# Carga de variables de entorno
+# ---------------------------------------------------------------------------
+
 load_dotenv()
 
 
+# ---------------------------------------------------------------------------
+# Helpers
+# ---------------------------------------------------------------------------
+
 def fetch_search_filters() -> list[dict]:
     """
-    Obtiene todas las filas de la tabla 'search_filters' en Supabase.
-    Devuelve una lista de dicts con los parámetros de búsqueda de cada usuario.
+    Descarga todos los filtros activos de la tabla 'search_filters' en Supabase.
+    Retorna una lista de dicts con los parámetros de búsqueda de cada usuario.
     """
     resultado = supabase.table("search_filters").select("*").execute()
     return resultado.data or []
 
 
+# ---------------------------------------------------------------------------
+# Orquestador principal
+# ---------------------------------------------------------------------------
+
 def run() -> None:
     """
-    Flujo principal del scraper:
-      1. Carga los filtros de búsqueda desde Supabase.
-      2. Abre una única instancia del navegador stealth.
-      3. Raspa ofertas por cada filtro y las agrupa por URL.
-      4. Por cada URL única notifica a todos los usuarios que coincidieron.
-      5. Cierra el navegador al finalizar, incluso si ocurre un error.
+    Flujo principal:
+      1. Descarga filtros de Supabase.
+      2. Abre browser stealth (única instancia).
+      3. Por cada filtro: scraping masivo → deduplicación → notificaciones.
+      4. Cierra el browser en finally.
     """
-    print("[main] Iniciando trovilo...")
+    log.info("══════════════════════════════════════")
+    log.info("Iniciando trovilo — scraper masivo")
+    log.info("══════════════════════════════════════")
 
+    # 1. Obtener filtros activos
     try:
         filtros = fetch_search_filters()
     except Exception as e:
-        print(f"[main] Error al obtener filtros de Supabase: {e}")
+        log.error("Error al obtener filtros de Supabase: %s", e)
         return
 
     if not filtros:
-        print("[main] No se encontraron filtros de búsqueda. Saliendo.")
+        log.warning("No se encontraron filtros de búsqueda activos. Saliendo.")
         return
 
-    print(f"[main] {len(filtros)} filtro(s) encontrado(s).")
+    log.info("%d filtro(s) activo(s) encontrado(s).", len(filtros))
 
-    # Agrupa ofertas por URL y acumula los usuarios que coincidieron con cada una.
-    # Estructura: { job_url: {'job': {...}, 'users': [...], 'tech': str, 'location': str} }
-    jobs_map: dict[str, dict] = {}
+    # 2. Inicializar browser stealth (una sola instancia para todos los filtros)
+    pw_ctx      = sync_playwright().start()
+    page        = None
+    context_obj = None
 
-    with sync_playwright() as pw:
-        with get_stealth_page(pw) as (page, _context):
+    try:
+        context_mgr  = get_stealth_page(pw_ctx)
+        page, context_obj = context_mgr.__enter__()
+        log.info("Browser stealth iniciado correctamente.")
 
-            for filtro in filtros:
-                tech          = filtro.get("tech_stack", "").strip()
-                location      = filtro.get("location", "").strip()
-                job_type      = filtro.get("job_type", "").strip()
-                telegram_user = filtro.get("telegram_user", "").strip()
+        # 3. Procesar cada filtro
+        for idx, filtro in enumerate(filtros, start=1):
+            tech          = filtro.get("tech_stack",    "").strip()
+            location      = filtro.get("location",      "").strip()
+            job_type      = filtro.get("job_type",      "").strip()
+            telegram_user = filtro.get("telegram_user", "").strip()
 
-                if not all([tech, location, job_type, telegram_user]):
-                    print(f"[main] Filtro incompleto, omitiendo: {filtro}")
-                    continue
+            if not all([tech, location, job_type, telegram_user]):
+                log.warning("Filtro %d incompleto, omitiendo: %s", idx, filtro)
+                continue
 
-                print(
-                    f"[main] Buscando — tech: '{tech}' | "
-                    f"ubicación: '{location}' | modalidad: '{job_type}' | "
-                    f"usuario: '{telegram_user}'"
+            log.info(
+                "── Filtro %d/%d — tech: '%s' | location: '%s' | "
+                "job_type: '%s' | usuario: '%s'",
+                idx, len(filtros), tech, location, job_type, telegram_user,
+            )
+
+            # a. Scraping masivo sobre todos los lotes de dominios
+            try:
+                jobs = run_massive_scraping(page, tech, location, job_type)
+                log.info("Filtro %d — %d oferta(s) encontrada(s) en total.", idx, len(jobs))
+            except Exception as e:
+                log.error("Filtro %d — error durante el scraping: %s", idx, e)
+                continue
+
+            if not jobs:
+                notify_no_results(telegram_user, tech, location)
+                continue
+
+            # b. Deduplicar, persistir en Supabase y disparar alertas
+            try:
+                process_and_notify(
+                    jobs,
+                    users=[telegram_user],
+                    tech=tech,
+                    location=location,
                 )
+            except Exception as e:
+                log.error("Filtro %d — error al notificar: %s", idx, e)
 
-                try:
-                    jobs = scrape_ats_with_page(page, tech, location, job_type)
-                    print(f"[main] {len(jobs)} oferta(s) para '{telegram_user}'.")
+        log.info("══════════════════════════════════════")
+        log.info("Scraping finalizado para todos los filtros.")
+        log.info("══════════════════════════════════════")
 
-                    if not jobs:
-                        # Sin resultados — notificar de inmediato a este usuario
-                        notify_no_results(telegram_user, tech, location)
-                        continue
-
-                    # Acumular en el mapa; si la misma URL coincide con varios
-                    # usuarios se listan todos en el mismo mensaje
-                    for job in jobs:
-                        url = job.get("url", "").strip()
-                        if not url:
-                            continue
-                        if url not in jobs_map:
-                            jobs_map[url] = {
-                                "job":      job,
-                                "users":    [],
-                                "tech":     tech,
-                                "location": location,
-                            }
-                        if telegram_user not in jobs_map[url]["users"]:
-                            jobs_map[url]["users"].append(telegram_user)
-
-                except Exception as e:
-                    print(f"[main] Error procesando filtro de '{telegram_user}': {e}")
-
-    # Una notificación por oferta única, mencionando a todos los usuarios
-    print(f"[main] {len(jobs_map)} oferta(s) única(s) a procesar.")
-    for url, data in jobs_map.items():
-        process_and_notify(
-            [data["job"]],
-            users=data["users"],
-            tech=data["tech"],
-            location=data["location"],
-        )
-
-    print("[main] Scraping finalizado. Navegador cerrado.")
+    finally:
+        # 4. Garantizar cierre del browser aunque ocurra una excepción
+        try:
+            if context_obj:
+                context_mgr.__exit__(None, None, None)
+                log.info("Browser cerrado correctamente.")
+        except Exception as e:
+            log.warning("Error al cerrar el browser: %s", e)
+        try:
+            pw_ctx.stop()
+        except Exception:
+            pass
 
 
 if __name__ == "__main__":

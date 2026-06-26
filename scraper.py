@@ -1,34 +1,39 @@
 """
 scraper.py
 ----------
-Raspa ofertas de trabajo de plataformas ATS usando DuckDuckGo HTML
-(html.duckduckgo.com/html/) con Playwright en modo stealth.
-
-Plataformas objetivo:
-  - boards.greenhouse.io
-  - jobs.lever.co
-  - apply.workable.com
-  - jobs.ashbyhq.com
+Raspa ofertas de trabajo de plataformas ATS y job boards usando
+DuckDuckGo HTML con Playwright en modo stealth.
 
 Funciones principales:
+  run_massive_scraping(page, tech, location, job_type)
+      Itera sobre todos los lotes de dominios generados por query_builder,
+      con logging y sleep anti-detección entre batches.
+
   scrape_ats_with_page(page, tech, location, job_type)
-      Reutiliza una página Playwright ya abierta (recomendado para
-      procesar múltiples filtros con un solo navegador).
+      Alias público que delega en run_massive_scraping.
 
   scrape_ats(tech, location, job_type)
-      Wrapper de conveniencia que crea y cierra su propio navegador.
-      Útil para pruebas o ejecuciones únicas.
+      Wrapper de conveniencia que crea su propio navegador stealth.
 """
 import time
 import random
 import re
-from urllib.parse import quote_plus, urlparse
+import logging
+from urllib.parse import urlparse
 from playwright.sync_api import Page
-from query_builder import build_duckduckgo_query
+from query_builder import build_duckduckgo_query, generate_query_batches
 
-# Plataformas ATS objetivo
+# Logger del módulo — emite a stdout para que GitHub Actions lo capture
+logging.basicConfig(
+    level=logging.INFO,
+    format="[%(asctime)s] %(levelname)s %(message)s",
+    datefmt="%H:%M:%S",
+)
+log = logging.getLogger("scraper")
+
+# Plataformas ATS objetivo (para validación de URLs)
 ATS_DOMAINS = [
-    "boards.greenhouse.io",
+    "greenhouse.io",
     "jobs.lever.co",
     "jobs.ashbyhq.com",
     "apply.workable.com",
@@ -36,6 +41,16 @@ ATS_DOMAINS = [
     "recruitee.com",
     "bamboohr.com",
     "jobs.smartrecruiters.com",
+    "icims.com",
+    "taleo.net",
+    "myworkdayjobs.com",
+    "jobvite.com",
+    "wellfound.com",
+    "weworkremotely.com",
+    "remoteok.com",
+    "getonbrd.com",
+    "web3.career",
+    "larajobs.com",
 ]
 
 DDG_HTML_URL = "https://html.duckduckgo.com/html/"
@@ -178,62 +193,81 @@ def _extract_results_from_page(page, seen_urls: set) -> list[dict]:
 
 
 # ---------------------------------------------------------------------------
-# Scraping via DuckDuckGo HTML
+# Scraping masivo via DuckDuckGo HTML
 # ---------------------------------------------------------------------------
 
-def scrape_jobs_via_duckduckgo(
+def run_massive_scraping(
     page: Page,
     tech: str,
     location: str,
     job_type: str,
 ) -> list[dict]:
     """
-    Busca ofertas en DuckDuckGo HTML (sin JS, más liviano y estable).
+    Scraping masivo iterando sobre todos los lotes de dominios de query_builder.
 
-    Estrategia:
-      1. Navega a html.duckduckgo.com/html/
-      2. Llena el formulario de búsqueda con la query construida
-      3. Extrae resultados orgánicos de la página 1
-      4. Si existe el botón "Next" (.nav-link form), lo pulsa y extrae página 2
-      5. Filtra solo URLs de dominios ATS y retorna lista de dicts
+    Por cada batch:
+      1. Navega a html.duckduckgo.com/html/ y ejecuta la búsqueda
+      2. Extrae resultados de página 1
+      3. Si existe botón "Next" (.nav-link form), extrae página 2
+      4. Duerme 3-6 segundos entre lotes (firma humana de baja intensidad)
+      5. Si el batch falla (timeout, selector ausente), loguea y continúa
     """
-    query = build_duckduckgo_query(tech, location, job_type)
+    batches   = generate_query_batches(tech, location, job_type)
     jobs: list[dict] = []
     seen_urls: set[str] = set()
+    total = len(batches)
 
-    try:
-        page.goto(DDG_HTML_URL, wait_until="domcontentloaded", timeout=30_000)
-        _jitter(1.0, 2.5)
+    log.info("Iniciando scraping masivo — %d lotes para tech='%s' location='%s' job_type='%s'",
+             total, tech, location, job_type)
 
-        search_input = page.query_selector("input[name='q']")
-        if not search_input:
-            print("[scraper] No se encontró el campo de búsqueda de DuckDuckGo.")
-            return jobs
+    for idx, query in enumerate(batches, start=1):
+        log.info("Batch %d/%d — %d chars", idx, total, len(query))
 
-        search_input.fill(query)
-        _jitter(0.5, 1.2)
-        search_input.press("Enter")
-        page.wait_for_load_state("domcontentloaded", timeout=20_000)
-        _jitter(1.0, 2.0)
+        try:
+            page.goto(DDG_HTML_URL, wait_until="domcontentloaded", timeout=30_000)
+            time.sleep(random.uniform(1.0, 2.0))
 
-        # Página 1
-        jobs.extend(_extract_results_from_page(page, seen_urls))
+            search_input = page.query_selector("input[name='q']")
+            if not search_input:
+                log.warning("Batch %d: campo de búsqueda no encontrado, omitiendo.", idx)
+                continue
 
-        # Página 2 — si existe el botón "Next"
-        next_btn = page.query_selector(".nav-link form")
-        if next_btn:
-            try:
-                next_btn.evaluate("form => form.submit()")
-                page.wait_for_load_state("domcontentloaded", timeout=20_000)
-                _jitter(1.0, 2.0)
-                jobs.extend(_extract_results_from_page(page, seen_urls))
-            except Exception as e:
-                print(f"[scraper] Error cargando página 2: {e}")
+            search_input.fill(query)
+            time.sleep(random.uniform(0.4, 1.0))
+            search_input.press("Enter")
+            page.wait_for_load_state("domcontentloaded", timeout=20_000)
+            time.sleep(random.uniform(1.0, 2.0))
 
-    except Exception as e:
-        print(f"[scraper] Error buscando en DuckDuckGo: {e}")
+            # Página 1
+            before = len(jobs)
+            jobs.extend(_extract_results_from_page(page, seen_urls))
+            log.info("Batch %d — página 1: %d ofertas nuevas", idx, len(jobs) - before)
 
+            # Página 2
+            next_btn = page.query_selector(".nav-link form")
+            if next_btn:
+                try:
+                    next_btn.evaluate("form => form.submit()")
+                    page.wait_for_load_state("domcontentloaded", timeout=20_000)
+                    time.sleep(random.uniform(1.0, 2.0))
+                    before2 = len(jobs)
+                    jobs.extend(_extract_results_from_page(page, seen_urls))
+                    log.info("Batch %d — página 2: %d ofertas nuevas", idx, len(jobs) - before2)
+                except Exception as e:
+                    log.error("Batch %d: error en página 2 — %s", idx, e)
+
+        except Exception as e:
+            log.error("Batch %d falló — %s: %s", idx, type(e).__name__, e)
+
+        # Sleep anti-detección entre lotes (3-6 s)
+        if idx < total:
+            sleep_s = random.uniform(3.0, 6.0)
+            log.info("Batch %d completado. Durmiendo %.1fs antes del siguiente.", idx, sleep_s)
+            time.sleep(sleep_s)
+
+    log.info("Scraping masivo finalizado — %d ofertas únicas encontradas.", len(jobs))
     return jobs
+
 
 
 # ---------------------------------------------------------------------------
@@ -242,22 +276,25 @@ def scrape_jobs_via_duckduckgo(
 
 def scrape_ats_with_page(page: Page, tech: str, location: str, job_type: str) -> list[dict]:
     """
-    Wrapper público que delega en scrape_jobs_via_duckduckgo.
+    Wrapper público que delega en run_massive_scraping.
     Mantiene la misma firma para no romper main.py.
+    Si job_type tiene múltiples valores (ej. "remote,hybrid"),
+    ejecuta un scraping masivo por cada modalidad.
     """
-    # job_type puede venir como "remote,hybrid" — buscar una vez por modalidad
     types = [t.strip() for t in job_type.split(",") if t.strip()]
     all_jobs: list[dict] = []
     seen: set[str] = set()
 
     for jt in types:
-        results = scrape_jobs_via_duckduckgo(page, tech, location, jt)
+        results = run_massive_scraping(page, tech, location, jt)
         for job in results:
             if job["url"] not in seen:
                 seen.add(job["url"])
                 all_jobs.append(job)
         if len(types) > 1:
-            _jitter(2.0, 4.0)
+            sleep_s = random.uniform(3.0, 6.0)
+            log.info("Modalidad '%s' completada. Durmiendo %.1fs antes de la siguiente.", jt, sleep_s)
+            time.sleep(sleep_s)
 
     return all_jobs
 
