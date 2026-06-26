@@ -158,23 +158,27 @@
 
             <!-- Modalidad -->
             <div>
-              <label for="job_type" class="block text-sm font-medium text-gray-300 mb-1">
+              <label class="block text-sm font-medium text-gray-300 mb-2">
                 Modalidad
               </label>
-              <select
-                id="job_type"
-                name="job_type"
-                required
-                class="w-full rounded-lg bg-gray-800 border border-gray-700 text-white
-                       px-4 py-2.5 text-sm
-                       focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent
-                       transition appearance-none cursor-pointer"
-              >
-                <option value="" disabled selected>Seleccioná una modalidad</option>
-                <option value="remote">Remoto</option>
-                <option value="hybrid">Híbrido</option>
-                <option value="on-site">Presencial</option>
-              </select>
+              <div class="flex gap-4">
+                <label class="flex items-center gap-2 cursor-pointer text-sm text-gray-300">
+                  <input type="checkbox" name="job_type" value="remote"
+                    class="rounded bg-gray-800 border-gray-600 text-indigo-500 focus:ring-indigo-500 focus:ring-offset-gray-900" />
+                  Remoto
+                </label>
+                <label class="flex items-center gap-2 cursor-pointer text-sm text-gray-300">
+                  <input type="checkbox" name="job_type" value="hybrid"
+                    class="rounded bg-gray-800 border-gray-600 text-indigo-500 focus:ring-indigo-500 focus:ring-offset-gray-900" />
+                  Híbrido
+                </label>
+                <label class="flex items-center gap-2 cursor-pointer text-sm text-gray-300">
+                  <input type="checkbox" name="job_type" value="on-site"
+                    class="rounded bg-gray-800 border-gray-600 text-indigo-500 focus:ring-indigo-500 focus:ring-offset-gray-900" />
+                  Presencial
+                </label>
+              </div>
+              <p id="jobTypeError" class="mt-1 text-xs text-red-400 hidden">Seleccioná al menos una modalidad.</p>
             </div>
 
             <!-- Ubicación -->
@@ -244,11 +248,60 @@
                     <th class="px-3 py-2">Tecnologías</th>
                     <th class="px-3 py-2">Modalidad</th>
                     <th class="px-3 py-2">Ubicación</th>
+                    <th class="px-3 py-2"></th>
                   </tr>
                 </thead>
                 <tbody id="membersTableBody" class="divide-y divide-gray-700/50 text-gray-300">
                 </tbody>
               </table>
+            </div>
+          </div>
+
+          <!-- Modal de edición -->
+          <div id="editModal" class="hidden fixed inset-0 z-50 flex items-center justify-center bg-black/60 px-4">
+            <div class="w-full max-w-sm bg-gray-900 rounded-2xl shadow-2xl p-6 space-y-4">
+              <h3 class="text-sm font-semibold text-white">Editar criterios</h3>
+              <input type="hidden" id="editId" />
+
+              <div>
+                <label class="block text-xs text-gray-400 mb-1">Tecnologías</label>
+                <input id="editTech" type="text"
+                  class="w-full rounded-lg bg-gray-800 border border-gray-700 text-white placeholder-gray-500 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500" />
+              </div>
+
+              <div>
+                <label class="block text-xs text-gray-400 mb-1">Modalidad</label>
+                <div class="flex gap-4">
+                  <label class="flex items-center gap-1.5 cursor-pointer text-sm text-gray-300">
+                    <input type="checkbox" class="edit-job-type rounded bg-gray-800 border-gray-600 text-indigo-500" value="remote" /> Remoto
+                  </label>
+                  <label class="flex items-center gap-1.5 cursor-pointer text-sm text-gray-300">
+                    <input type="checkbox" class="edit-job-type rounded bg-gray-800 border-gray-600 text-indigo-500" value="hybrid" /> Híbrido
+                  </label>
+                  <label class="flex items-center gap-1.5 cursor-pointer text-sm text-gray-300">
+                    <input type="checkbox" class="edit-job-type rounded bg-gray-800 border-gray-600 text-indigo-500" value="on-site" /> Presencial
+                  </label>
+                </div>
+              </div>
+
+              <div>
+                <label class="block text-xs text-gray-400 mb-1">Ubicación</label>
+                <input id="editLocation" type="text"
+                  class="w-full rounded-lg bg-gray-800 border border-gray-700 text-white placeholder-gray-500 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500" />
+              </div>
+
+              <div id="editError" class="hidden text-xs text-red-400">Seleccioná al menos una modalidad.</div>
+
+              <div class="flex gap-3 pt-1">
+                <button id="editSaveBtn" onclick="saveEdit()"
+                  class="flex-1 rounded-lg bg-indigo-600 hover:bg-indigo-500 text-white text-sm font-semibold py-2 transition disabled:opacity-50">
+                  Guardar
+                </button>
+                <button onclick="closeEditModal()"
+                  class="flex-1 rounded-lg border border-gray-600 text-gray-300 hover:bg-gray-800 text-sm py-2 transition">
+                  Cancelar
+                </button>
+              </div>
             </div>
           </div>
         </div>
@@ -367,20 +420,27 @@
       const JOB_TYPE_LABELS = { remote: "Remoto", hybrid: "Híbrido", "on-site": "Presencial" };
 
       async function loadMembersTable() {
-        const { data, error } = await db.from("search_filters").select("telegram_user, tech_stack, job_type, location");
+        const { data, error } = await db.from("search_filters").select("id, telegram_user, tech_stack, job_type, location");
 
         membersTableBody.innerHTML = "";
 
         if (error || !data?.length) {
-          membersTableBody.innerHTML = `<tr><td colspan="4" class="px-3 py-4 text-center text-gray-500">Sin miembros registrados.</td></tr>`;
+          membersTableBody.innerHTML = `<tr><td colspan="5" class="px-3 py-4 text-center text-gray-500">Sin miembros registrados.</td></tr>`;
         } else {
           for (const row of data) {
             const tr = document.createElement("tr");
+            const modalidadLabel = escapeHtml((row.job_type ?? "").split(",").map(t => JOB_TYPE_LABELS[t] ?? t).join(", "));
             tr.innerHTML = `
               <td class="px-3 py-2 font-mono">@${escapeHtml(row.telegram_user)}</td>
               <td class="px-3 py-2">${escapeHtml(row.tech_stack)}</td>
-              <td class="px-3 py-2">${JOB_TYPE_LABELS[row.job_type] ?? row.job_type}</td>
+              <td class="px-3 py-2">${modalidadLabel}</td>
               <td class="px-3 py-2">${escapeHtml(row.location)}</td>
+              <td class="px-3 py-2 text-right">
+                <button onclick='openEditModal(${JSON.stringify(row)})'
+                  class="text-indigo-400 hover:text-indigo-300 transition text-xs underline">
+                  Editar
+                </button>
+              </td>
             `;
             membersTableBody.appendChild(tr);
           }
@@ -389,6 +449,63 @@
         membersSection.classList.remove("hidden");
       }
 
+      // ─── Modal de edición ─────────────────────────────────────────────────
+
+      function openEditModal(row) {
+        document.getElementById("editId").value       = row.id;
+        document.getElementById("editTech").value     = row.tech_stack;
+        document.getElementById("editLocation").value = row.location;
+        document.getElementById("editError").classList.add("hidden");
+
+        const selected = (row.job_type ?? "").split(",");
+        document.querySelectorAll(".edit-job-type").forEach(cb => {
+          cb.checked = selected.includes(cb.value);
+        });
+
+        document.getElementById("editModal").classList.remove("hidden");
+      }
+
+      function closeEditModal() {
+        document.getElementById("editModal").classList.add("hidden");
+      }
+
+      async function saveEdit() {
+        const id       = document.getElementById("editId").value;
+        const tech     = document.getElementById("editTech").value.trim();
+        const location = document.getElementById("editLocation").value.trim();
+        const types    = [...document.querySelectorAll(".edit-job-type:checked")].map(cb => cb.value);
+
+        if (types.length === 0) {
+          document.getElementById("editError").classList.remove("hidden");
+          return;
+        }
+        document.getElementById("editError").classList.add("hidden");
+
+        const btn = document.getElementById("editSaveBtn");
+        btn.disabled    = true;
+        btn.textContent = "Guardando...";
+
+        const { error } = await db.from("search_filters")
+          .update({ tech_stack: tech, job_type: types.join(","), location })
+          .eq("id", id);
+
+        btn.disabled    = false;
+        btn.textContent = "Guardar";
+
+        if (error) {
+          document.getElementById("editError").textContent = "Error al guardar: " + error.message;
+          document.getElementById("editError").classList.remove("hidden");
+        } else {
+          closeEditModal();
+          loadMembersTable();
+        }
+      }
+
+      // Cerrar modal al hacer clic fuera
+      document.getElementById("editModal").addEventListener("click", (e) => {
+        if (e.target === document.getElementById("editModal")) closeEditModal();
+      });
+
       function escapeHtml(str) {
         return String(str ?? "").replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;");
       }
@@ -396,12 +513,23 @@
       filterForm.addEventListener("submit", async (e) => {
         e.preventDefault();
 
+        // Leer modalidades seleccionadas
+        const selectedTypes = [...document.querySelectorAll('input[name="job_type"]:checked')]
+          .map(cb => cb.value);
+
+        const jobTypeError = document.getElementById("jobTypeError");
+        if (selectedTypes.length === 0) {
+          jobTypeError.classList.remove("hidden");
+          return;
+        }
+        jobTypeError.classList.add("hidden");
+
         const telegramRaw = document.getElementById("telegram_user").value.trim();
 
         // Armar el objeto a insertar según el esquema de 'search_filters'
         const payload = {
           tech_stack:    document.getElementById("tech_stack").value.trim(),
-          job_type:      document.getElementById("job_type").value,
+          job_type:      selectedTypes.join(","),
           location:      document.getElementById("location").value.trim(),
           // Guardar siempre sin '@' para mantener consistencia en la BD
           telegram_user: telegramRaw.replace(/^@/, ""),
