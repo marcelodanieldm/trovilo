@@ -20,13 +20,16 @@ Uso:
 Programado vía GitHub Actions (ver .github/workflows/scraper.yml).
 """
 import logging
+import re
 import time
+from datetime import datetime, timezone
 from dotenv import load_dotenv
 from playwright.sync_api import sync_playwright
 from browser import get_stealth_page
 from scraper import execute_unbreakable_scraping
 from notifier import supabase, bulk_filter_and_save, process_and_notify, notify_no_results
 from ats_engine import fetch_greenhouse_jobs, fetch_lever_jobs, RateLimitError
+from telegram_notifier import send_job_alert
 
 # ---------------------------------------------------------------------------
 # Configuración global de logging
@@ -44,6 +47,22 @@ log = logging.getLogger("main")
 # ---------------------------------------------------------------------------
 
 load_dotenv()
+
+# ---------------------------------------------------------------------------
+# Filtro de palabras clave para el pipeline ATS
+# ---------------------------------------------------------------------------
+
+# Solo se notifican y persisten ofertas cuyo título contenga alguno de estos términos.
+# Ajustar según los intereses del equipo.
+_TITLE_KEYWORDS = re.compile(
+    r'\b(qa|quality[\s\-]*assurance|automation|python|react|node\.?js|remote)\b',
+    re.IGNORECASE,
+)
+
+
+def _matches_keywords(job: dict) -> bool:
+    """Retorna True si el título del job contiene al menos una keyword relevante."""
+    return bool(_TITLE_KEYWORDS.search(job.get("title", "")))
 
 
 # ---------------------------------------------------------------------------
@@ -74,7 +93,7 @@ def fetch_target_companies() -> list[dict]:
 
 
 # ---------------------------------------------------------------------------
-# Pipeline ATS directo
+# Pipeline ATS directo con Telegram
 # ---------------------------------------------------------------------------
 
 def run_ats_pipeline() -> None:
@@ -84,10 +103,12 @@ def run_ats_pipeline() -> None:
     Flujo:
       1. Descarga target_companies activas de Supabase.
       2. Por cada empresa llama al fetcher correspondiente según ats_type.
-      3. Agrega todos los jobs en un único array y hace upsert masivo
-         en sent_jobs (deduplicación por job_url).
+      3. Filtra las ofertas por _TITLE_KEYWORDS (QA, Automation, Python…).
+      4. Consulta sent_jobs para identificar las realmente nuevas.
+      5. Envía un alert de Telegram por cada oferta nueva.
+      6. Hace upsert masivo en sent_jobs con title, company, job_url, sent_at.
     """
-    log.info("-- ATS pipeline: cargando empresas objetivo...")
+    log.info("── ATS pipeline: cargando empresas objetivo...")
 
     try:
         companies = fetch_target_companies()
@@ -106,8 +127,8 @@ def run_ats_pipeline() -> None:
         "lever":      fetch_lever_jobs,
     }
 
+    # 1 + 2. Recolectar todas las ofertas de todos los ATS
     all_jobs: list[dict] = []
-
     for row in companies:
         ats_type = (row.get("ats_type") or "").lower()
         ats_id   =  row.get("ats_id")   or ""
@@ -122,20 +143,26 @@ def run_ats_pipeline() -> None:
             jobs = fetcher(ats_id)
             all_jobs.extend(jobs)
         except RateLimitError:
-            log.warning("ATS pipeline: rate-limit en %s (%s) — esperando 60 s.", name, ats_type)
+            log.warning("ATS pipeline: rate-limit en %s — esperando 60 s.", name)
             time.sleep(60)
         except Exception as exc:
             log.error("ATS pipeline: error en %s (%s): %s", name, ats_type, exc)
 
-    log.info("ATS pipeline: %d oferta(s) recolectada(s) en total.", len(all_jobs))
+    log.info("ATS pipeline: %d oferta(s) recolectada(s) antes del filtro.", len(all_jobs))
 
-    if not all_jobs:
+    # 3. Filtrar por palabras clave en el título
+    relevant = [j for j in all_jobs if _matches_keywords(j)]
+    log.info(
+        "ATS pipeline: %d oferta(s) relevantes (keyword match).",
+        len(relevant),
+    )
+
+    if not relevant:
+        log.info("ATS pipeline: ninguna oferta supera el filtro de keywords.")
         return
 
-    # Upsert masivo en sent_jobs.
-    # ats_engine usa 'job_url' directamente (coincide con la columna de BD);
-    # solo se insertan filas cuya job_url no exista aún.
-    urls = [j["job_url"] for j in all_jobs if j.get("job_url")]
+    # 4. Consultar sent_jobs para identificar las realmente nuevas
+    urls = [j["job_url"] for j in relevant if j.get("job_url")]
     try:
         existing = (
             supabase.table("sent_jobs")
@@ -148,26 +175,53 @@ def run_ats_pipeline() -> None:
         log.error("ATS pipeline: error consultando sent_jobs: %s", exc)
         known = set()
 
-    new_jobs = [j for j in all_jobs if j.get("job_url") and j["job_url"] not in known]
+    new_jobs = [j for j in relevant if j.get("job_url") and j["job_url"] not in known]
+
+    log.info(
+        "ATS pipeline: %d oferta(s) nueva(s) para notificar.",
+        len(new_jobs),
+    )
 
     if not new_jobs:
-        log.info("ATS pipeline: sin ofertas nuevas para persistir.")
+        log.info("ATS pipeline: sin ofertas nuevas. Nada que notificar.")
         return
 
+    # 5. Enviar alert de Telegram por cada oferta nueva
+    sent_count = 0
+    for job in new_jobs:
+        ok = send_job_alert(
+            title    = job.get("title",    ""),
+            company  = job.get("company",  ""),
+            location = job.get("location", ""),
+            job_url  = job["job_url"],
+        )
+        if ok:
+            sent_count += 1
+        # Rate limit: máx ~2 mensajes/s para no saturar la API de Telegram
+        time.sleep(0.5)
+
+    log.info("ATS pipeline: %d/%d alertas de Telegram enviadas.", sent_count, len(new_jobs))
+
+    # 6. Upsert masivo en sent_jobs
+    now_iso = datetime.now(timezone.utc).isoformat()
     records = [
         {
-            "job_url": j["job_url"],
-            "title":   j.get("title",   ""),
-            "company": j.get("company", ""),
+            "job_url":  j["job_url"],
+            "title":    j.get("title",   ""),
+            "company":  j.get("company", ""),
+            "sent_at":  now_iso,
         }
         for j in new_jobs
     ]
 
     try:
         supabase.table("sent_jobs").upsert(records, on_conflict="job_url").execute()
-        log.info("ATS pipeline: upsert de %d oferta(s) nuevas completado.", len(records))
+        log.info(
+            "ATS pipeline: upsert de %d oferta(s) en sent_jobs completado.",
+            len(records),
+        )
     except Exception as exc:
-        log.error("ATS pipeline: error en upsert: %s", exc)
+        log.error("ATS pipeline: error en upsert de sent_jobs: %s", exc)
 
 
 # ---------------------------------------------------------------------------
