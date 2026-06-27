@@ -20,11 +20,13 @@ Uso:
 Programado vía GitHub Actions (ver .github/workflows/scraper.yml).
 """
 import logging
+import time
 from dotenv import load_dotenv
 from playwright.sync_api import sync_playwright
 from browser import get_stealth_page
 from scraper import execute_unbreakable_scraping
 from notifier import supabase, bulk_filter_and_save, process_and_notify, notify_no_results
+from ats_engine import fetch_greenhouse_jobs, fetch_lever_jobs, RateLimitError
 
 # ---------------------------------------------------------------------------
 # Configuración global de logging
@@ -57,6 +59,117 @@ def fetch_search_filters() -> list[dict]:
     return resultado.data or []
 
 
+def fetch_target_companies() -> list[dict]:
+    """
+    Descarga las empresas activas de 'target_companies'.
+    Retorna lista de dicts con claves: company_name, ats_type, ats_id.
+    """
+    resultado = (
+        supabase.table("target_companies")
+        .select("company_name, ats_type, ats_id")
+        .eq("active", True)
+        .execute()
+    )
+    return resultado.data or []
+
+
+# ---------------------------------------------------------------------------
+# Pipeline ATS directo
+# ---------------------------------------------------------------------------
+
+def run_ats_pipeline() -> None:
+    """
+    Pipeline de ingesta directa via APIs de ATS (Greenhouse / Lever).
+
+    Flujo:
+      1. Descarga target_companies activas de Supabase.
+      2. Por cada empresa llama al fetcher correspondiente según ats_type.
+      3. Agrega todos los jobs en un único array y hace upsert masivo
+         en sent_jobs (deduplicación por job_url).
+    """
+    log.info("-- ATS pipeline: cargando empresas objetivo...")
+
+    try:
+        companies = fetch_target_companies()
+    except Exception as exc:
+        log.error("ATS pipeline: error al cargar target_companies: %s", exc)
+        return
+
+    if not companies:
+        log.warning("ATS pipeline: sin empresas activas en target_companies.")
+        return
+
+    log.info("ATS pipeline: %d empresa(s) activa(s).", len(companies))
+
+    _FETCHERS = {
+        "greenhouse": fetch_greenhouse_jobs,
+        "lever":      fetch_lever_jobs,
+    }
+
+    all_jobs: list[dict] = []
+
+    for row in companies:
+        ats_type = (row.get("ats_type") or "").lower()
+        ats_id   =  row.get("ats_id")   or ""
+        name     =  row.get("company_name") or ats_id
+
+        fetcher = _FETCHERS.get(ats_type)
+        if not fetcher:
+            log.warning("ATS pipeline: ats_type '%s' desconocido (%s).", ats_type, name)
+            continue
+
+        try:
+            jobs = fetcher(ats_id)
+            all_jobs.extend(jobs)
+        except RateLimitError:
+            log.warning("ATS pipeline: rate-limit en %s (%s) — esperando 60 s.", name, ats_type)
+            time.sleep(60)
+        except Exception as exc:
+            log.error("ATS pipeline: error en %s (%s): %s", name, ats_type, exc)
+
+    log.info("ATS pipeline: %d oferta(s) recolectada(s) en total.", len(all_jobs))
+
+    if not all_jobs:
+        return
+
+    # Upsert masivo en sent_jobs.
+    # ats_engine usa 'job_url' directamente (coincide con la columna de BD);
+    # solo se insertan filas cuya job_url no exista aún.
+    urls = [j["job_url"] for j in all_jobs if j.get("job_url")]
+    try:
+        existing = (
+            supabase.table("sent_jobs")
+            .select("job_url")
+            .in_("job_url", urls)
+            .execute()
+        )
+        known = {r["job_url"] for r in (existing.data or [])}
+    except Exception as exc:
+        log.error("ATS pipeline: error consultando sent_jobs: %s", exc)
+        known = set()
+
+    new_jobs = [j for j in all_jobs if j.get("job_url") and j["job_url"] not in known]
+
+    if not new_jobs:
+        log.info("ATS pipeline: sin ofertas nuevas para persistir.")
+        return
+
+    records = [
+        {
+            "job_url": j["job_url"],
+            "title":   j.get("title",   ""),
+            "company": j.get("company", ""),
+        }
+        for j in new_jobs
+    ]
+
+    try:
+        supabase.table("sent_jobs").upsert(records, on_conflict="job_url").execute()
+        log.info("ATS pipeline: upsert de %d oferta(s) nuevas completado.", len(records))
+    except Exception as exc:
+        log.error("ATS pipeline: error en upsert: %s", exc)
+
+
 # ---------------------------------------------------------------------------
 # Orquestador principal
 # ---------------------------------------------------------------------------
@@ -72,6 +185,9 @@ def run() -> None:
     log.info("══════════════════════════════════════")
     log.info("Iniciando trovilo — scraper masivo")
     log.info("══════════════════════════════════════")
+
+    # 0. Pipeline directo ATS (sin browser, sin buscadores)
+    run_ats_pipeline()
 
     # 1. Obtener filtros activos
     try:
