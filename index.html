@@ -104,6 +104,39 @@
     /* ── Status dot ── */
     @keyframes pulse { 0%,100%{opacity:1} 50%{opacity:.35} }
     .dot-live { animation: pulse 2s infinite; }
+
+    /* ── Visited row ─────────────────────────────────────────────────────
+       Se aplica a la fila completa cuando el usuario ya abrió esa oferta.
+       opacity + grayscale dan una señal visual inmediata sin ocultar el
+       contenido (el usuario puede necesitar revisarlo de nuevo).
+       La transición en hover restaura la legibilidad sin layout shift.
+    ─────────────────────────────────────────────────────────────────── */
+    .job-row-visited {
+      opacity: 0.42;
+      filter: grayscale(28%);
+      transition: opacity 0.18s ease, filter 0.18s ease;
+    }
+    .job-row-visited:hover {
+      opacity: 0.82;
+      filter: grayscale(0%);
+    }
+
+    /* ── Visited badge: etiqueta "visto" minúscula junto al título ── */
+    .visited-badge {
+      display: inline-flex;
+      align-items: center;
+      padding: 1px 5px;
+      border-radius: 3px;
+      font-size: 9px;
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: 0.06em;
+      border: 1px solid rgba(63,63,70,0.6);
+      color: #52525b;
+      background: rgba(24,24,27,0.6);
+      flex-shrink: 0;
+      user-select: none;
+    }
   </style>
 </head>
 
@@ -1307,18 +1340,29 @@ const JobRowFactory = {
    *               Con ITEMS_PER_PAGE=50 la diferencia es imperceptible (<1ms).
    */
   create(job) {
+    const url       = job.job_url || '';
+    const isVisited = VisitedJobs.has(url);
+
     const a = document.createElement('a');
-    a.href   = this._safeUrl(job.job_url);
-    a.target = '_blank';
-    a.rel    = 'noopener noreferrer';
-    a.className = 'job-row flex items-center gap-3 px-6 py-2.5 border-b border-edge-1 cursor-pointer group';
-    a.dataset.jobUrl = job.job_url || '';
+    a.href         = this._safeUrl(url);
+    a.target       = '_blank';
+    a.rel          = 'noopener noreferrer';
+    a.dataset.jobUrl = url;
+
+    // Clases base de la fila; si ya fue visitada, aplicar estado visual
+    // directamente en la creación (sin esperar un re-render de Vue).
+    a.className = [
+      'job-row',
+      'flex items-center gap-3 px-6 py-2.5',
+      'border-b border-edge-1 cursor-pointer group',
+      isVisited ? 'job-row-visited' : '',
+    ].filter(Boolean).join(' ');
 
     // ── Favicon ──
     a.appendChild(this._makeFavicon(job));
 
-    // ── Cuerpo: título + badges ──
-    a.appendChild(this._makeBody(job));
+    // ── Cuerpo: título + badges (incluye "visto" si aplica) ──
+    a.appendChild(this._makeBody(job, isVisited));
 
     // ── Empresa ──
     const co = document.createElement('div');
@@ -1347,6 +1391,33 @@ const JobRowFactory = {
     applyBtn.textContent = 'Apply →';
     applyWrap.appendChild(applyBtn);
     a.appendChild(applyWrap);
+
+    // ── Click tracker ────────────────────────────────────────────────
+    // Se usa 'click' (no 'mousedown') para garantizar que el usuario
+    // efectivamente activó el enlace y no solo pasó el mouse.
+    // VisitedJobs.add() retorna true solo la primera vez → actualizamos
+    // el DOM una sola vez por URL, sin trabajo redundante en re-clicks.
+    //
+    // QA-UX ②  target="_blank" abre una nueva pestaña: la página actual
+    //          permanece visible. El cambio de clase es inmediatamente
+    //          perceptible por el usuario al volver a Trovilo.
+    //
+    // QA-Closure  La arrow function captura `a` (el nodo DOM) y `url`
+    //             por el closure de create(). Cuando TroviloScroller llame
+    //             a _clearDOM(), estos nodos se eliminan del DOM. Como el
+    //             listener es una arrow function interna sin referencias
+    //             externas, el GC libera tanto el listener como el nodo.
+    //             (Ver también QA-Memory ④ y ⑦ en TroviloScroller.)
+    a.addEventListener('click', () => {
+      if (!VisitedJobs.add(url)) return; // ya estaba registrada
+
+      // Aplicar estado visual sin destruir ni re-crear el nodo
+      a.classList.add('job-row-visited');
+
+      // Mostrar el badge "visto" que está oculto en filas no visitadas
+      const badge = a.querySelector('.visited-badge');
+      if (badge) badge.classList.remove('hidden');
+    });
 
     return a;
   },
@@ -1377,7 +1448,7 @@ const JobRowFactory = {
     return wrap;
   },
 
-  _makeBody(job) {
+  _makeBody(job, isVisited = false) {
     const body = document.createElement('div');
     body.className = 'flex-1 min-w-0 flex items-center gap-2 flex-wrap';
 
@@ -1385,6 +1456,18 @@ const JobRowFactory = {
     title.className = 'job-title-text text-[13px] font-medium text-zinc-300 truncate transition-colors leading-none';
     title.textContent = job.title || ''; // textContent: XSS-safe
     body.appendChild(title);
+
+    // ── Badge "visto" ──────────────────────────────────────────────────
+    // Se inserta siempre en el DOM para que el click handler pueda
+    // mostrarlo sin buscar en el árbol completo. Si la oferta no fue
+    // visitada, está oculto con la clase 'hidden' (display:none).
+    // QA-UX ③  El badge va ANTES que los otros badges (excl., loc.,
+    //          seniority) para que el historial sea visible al primer
+    //          golpe de vista, sin que el usuario tenga que leer el título.
+    const visitedBadge = document.createElement('span');
+    visitedBadge.className = `visited-badge${isVisited ? '' : ' hidden'}`;
+    visitedBadge.textContent = 'visto';
+    body.appendChild(visitedBadge);
 
     // Badge: exclusiva
     if (job.not_on_linkedin) {
@@ -1487,6 +1570,212 @@ const JobRowFactory = {
 };
 
 // ─────────────────────────────────────────────────────────────────────
+// MÓDULO 5 · FILTER STORAGE
+// Persiste y recupera el estado completo de los filtros del buscador
+// en LocalStorage bajo el prefijo 'trovilo_'.
+//
+// Diseño:
+//   · Cada filtro tiene su propia key para permitir escrituras parciales
+//     sin serializar el objeto completo en cada keystroke.
+//   · JSON.parse / JSON.stringify para soportar tipos no-string (boolean,
+//     number). Sin esto, `false` se guardaría como la string "false" y
+//     JSON.parse("false") devolvería el boolean false — OK. Pero usar
+//     JSON en todo evita casos borde con tipos futuros.
+//   · try/catch en cada operación: LocalStorage puede lanzar
+//     SecurityError (iframe con política restrictiva) o
+//     QuotaExceededError (raro para strings cortos, pero posible).
+// ─────────────────────────────────────────────────────────────────────
+const FilterStorage = {
+
+  KEYS: {
+    query:     'trovilo_search_query',
+    exclusive: 'trovilo_exclusive_toggle',
+    mode:      'trovilo_mode_filter',
+    location:  'trovilo_location_filter',
+    seniority: 'trovilo_seniority_filter',
+    time:      'trovilo_time_filter',
+  },
+
+  /**
+   * save(key, value)
+   * ─────────────────
+   * Persiste un filtro individual. Se llama desde los watchers de Vue,
+   * que disparan en cada cambio de valor (debounced implícitamente por
+   * el ciclo reactivo de Vue — máximo 1 vez por tick de microtask).
+   */
+  save(key, value) {
+    try {
+      localStorage.setItem(this.KEYS[key], JSON.stringify(value));
+    } catch (e) {
+      // Ignorar silenciosamente — la persistencia es UX bonus, no crítica.
+      console.warn('[FilterStorage] No se pudo guardar "%s":', key, e.message);
+    }
+  },
+
+  /**
+   * load(key, defaultVal)
+   * ─────────────────────
+   * Recupera un filtro. Si la key no existe o el JSON es inválido,
+   * retorna `defaultVal` en lugar de lanzar.
+   */
+  load(key, defaultVal) {
+    try {
+      const raw = localStorage.getItem(this.KEYS[key]);
+      return raw !== null ? JSON.parse(raw) : defaultVal;
+    } catch {
+      return defaultVal;
+    }
+  },
+
+  /**
+   * loadAll()
+   * ──────────
+   * Carga todos los filtros en un único objeto. Se llama una sola vez
+   * desde data() de Vue para inicializar el estado reactivo.
+   * No tocar el DOM aquí — esa responsabilidad es de Vue.
+   */
+  loadAll() {
+    return {
+      jobSearch:      this.load('query',     ''),
+      soloExclusivas: this.load('exclusive', false),
+      jobMode:        this.load('mode',      'all'),
+      jobLocation:    this.load('location',  ''),
+      jobSeniority:   this.load('seniority', ''),
+      jobTime:        this.load('time',      0),
+    };
+  },
+
+  /** Borra todos los filtros persistidos (util para "Limpiar filtros"). */
+  clearAll() {
+    Object.values(this.KEYS).forEach(k => {
+      try { localStorage.removeItem(k); } catch {}
+    });
+  },
+};
+
+
+// ─────────────────────────────────────────────────────────────────────
+// MÓDULO 6 · VISITED JOBS
+// Rastrea las ofertas que el usuario ya abrió.
+//
+// Estructura de datos:
+//   · _set: Set<string>  — O(1) has() durante el render de cada fila.
+//     Un Array sería O(n) por lookup, demasiado lento con 500+ visitados.
+//   · LocalStorage key: 'trovilo_visited_ids'
+//   · Formato: JSON array de URLs (strings).
+//   · Cap: MAX_ENTRIES = 500 para no crecer indefinidamente. Se eliminan
+//     las más antiguas (inicio del array) al superar el límite.
+//
+// QA-Storage ①  Los job_url son las PK naturales de cada oferta
+//              (únicas por constraint en Supabase). Se usan como ID de
+//              visita en lugar de un hash o UUID para evitar un paso de
+//              normalización y mantener la key legible en DevTools.
+//
+// QA-Storage ②  LocalStorage es síncrono. Llamar a _persist() en cada
+//              click es aceptable (una escritura por interacción del
+//              usuario). No se debouncea porque el dato debe quedar
+//              guardado antes de que el browser abra la nueva pestaña.
+// ─────────────────────────────────────────────────────────────────────
+const VisitedJobs = {
+
+  KEY:         'trovilo_visited_ids',
+  MAX_ENTRIES: 500,
+
+  /** Set en memoria. Único para todo el ciclo de vida de la página. */
+  _set: new Set(),
+
+  /**
+   * load()
+   * ───────
+   * Deserializa el historial desde LocalStorage al Set en memoria.
+   * Retorna `this` para permitir encadenamiento: VisitedJobs.load().has(url).
+   *
+   * QA-Storage ③  Si el JSON almacenado es un array inválido (corrupción,
+   *              edición manual en DevTools), se inicializa con Set vacío.
+   *              El historial corrupto no bloquea la app.
+   */
+  load() {
+    try {
+      const raw = localStorage.getItem(this.KEY);
+      const arr = raw ? JSON.parse(raw) : [];
+      this._set = new Set(Array.isArray(arr) ? arr : []);
+    } catch {
+      this._set = new Set();
+    }
+    return this;
+  },
+
+  /**
+   * has(url) → boolean
+   * ───────────────────
+   * Consulta O(1). Se llama una vez por fila durante el render.
+   * Con 50 filas por batch y un Set de 500 elementos, el costo total
+   * es insignificante (<0.1ms).
+   */
+  has(url) {
+    return Boolean(url) && this._set.has(url);
+  },
+
+  /**
+   * add(url) → boolean
+   * ───────────────────
+   * Marca una oferta como visitada. Retorna true si fue recién añadida
+   * (útil para que el caller actualice el DOM solo en ese caso).
+   *
+   * QA-UX ①  Llamar desde el event listener 'click' del <a>, no desde
+   *           'mousedown'. Con 'click' se garantiza que el usuario
+   *           efectivamente navegó (no solo pasó el mouse).
+   */
+  add(url) {
+    if (!url || this._set.has(url)) return false;
+    this._set.add(url);
+    this._persist();
+    return true; // recién añadido → el caller puede actualizar la UI
+  },
+
+  /**
+   * _persist()
+   * ───────────
+   * Escribe el Set al LocalStorage como array JSON, respetando MAX_ENTRIES.
+   * Si la escritura falla por cuota, poda el array a la mitad y reintenta.
+   *
+   * QA-Storage ④  slice(-MAX_ENTRIES) mantiene los MÁS RECIENTES.
+   *              Las visitas más antiguas (índice 0) son las primeras
+   *              en descartarse, que es el comportamiento esperado.
+   */
+  _persist() {
+    const arr    = [...this._set];
+    const toSave = arr.length > this.MAX_ENTRIES
+      ? arr.slice(-this.MAX_ENTRIES)
+      : arr;
+
+    try {
+      localStorage.setItem(this.KEY, JSON.stringify(toSave));
+    } catch (e) {
+      // QuotaExceededError: podar a la mitad y reintentar una vez
+      const half = arr.slice(-Math.floor(arr.length / 2));
+      this._set = new Set(half);
+      try {
+        localStorage.setItem(this.KEY, JSON.stringify(half));
+      } catch { /* si falla de nuevo, la sesión continúa sin persistencia */ }
+    }
+  },
+
+  /** Borra todo el historial de visitas (acción del usuario explícita). */
+  clear() {
+    this._set.clear();
+    try { localStorage.removeItem(this.KEY); } catch {}
+  },
+
+  get size() { return this._set.size; },
+};
+
+// Inicializar el historial de visitas ANTES de que Vue/JobRowFactory
+// se ejecuten, para que has() esté listo en el primer render.
+VisitedJobs.load();
+
+
+// ─────────────────────────────────────────────────────────────────────
 // Fin de Trovilo Engine — Vue app a continuación
 // ─────────────────────────────────────────────────────────────────────
 
@@ -1537,8 +1826,13 @@ createApp({
 
       /* Buscador */
       jobs: [], jobsLoading: false,
-      jobSearch: '', jobLocation: '', jobSeniority: '', jobTime: 0,
-      jobMode: 'all', soloExclusivas: false,
+
+      // ── Filtros: inicializados desde LocalStorage vía FilterStorage ──
+      // FilterStorage.loadAll() lee todas las keys en un único pass al
+      // arranque. Vue inicializará el estado reactivo con estos valores,
+      // por lo que filteredJobs ya los reflejará en el primer render
+      // sin necesidad de llamar a ninguna función extra.
+      ...FilterStorage.loadAll(),
       communitySource: 'all', scrapingCommunity: false,
       communityStatus: '', communityStatusType: 'muted',
     };
@@ -1936,6 +2230,24 @@ createApp({
    *             loadJobs() explícitamente.
    */
   watch: {
+    // ── Persistencia de filtros en LocalStorage ───────────────────────
+    // Cada watcher llama a FilterStorage.save() en cuanto Vue detecta
+    // un cambio en la propiedad reactiva. Como Vue batches los watchers
+    // en microtasks, múltiples cambios simultáneos (p.ej. pegar texto)
+    // resultan en una sola escritura a LocalStorage por tick.
+    //
+    // El orden de definición importa: estos watchers corren ANTES que
+    // `filteredJobs` porque en Vue 3 los watchers se ejecutan en orden
+    // de registro. Así queda garantizado que el valor está guardado
+    // antes de que el scroller renderice con los nuevos filtros.
+
+    jobSearch(v)      { FilterStorage.save('query',     v); },
+    soloExclusivas(v) { FilterStorage.save('exclusive', v); },
+    jobMode(v)        { FilterStorage.save('mode',      v); },
+    jobLocation(v)    { FilterStorage.save('location',  v); },
+    jobSeniority(v)   { FilterStorage.save('seniority', v); },
+    jobTime(v)        { FilterStorage.save('time',      v); },
+
     /**
      * Cuando los filtros cambian (filteredJobs devuelve un nuevo array),
      * resetear el scroller: limpiar DOM y re-renderizar desde página 1
