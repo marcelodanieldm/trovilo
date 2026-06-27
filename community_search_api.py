@@ -60,19 +60,36 @@ def _clean(value: object) -> str:
     return str(value or "").strip()
 
 
+_SYNONYMS: dict[str, list[str]] = {
+    "qa":         ["quality", "testing", "tester", "qa"],
+    "qe":         ["quality", "testing", "qe"],
+    "fe":         ["frontend", "front-end", "fe"],
+    "be":         ["backend", "back-end", "be"],
+    "js":         ["javascript", "js"],
+    "ts":         ["typescript", "ts"],
+    "ml":         ["machine learning", "ml"],
+    "ai":         ["artificial intelligence", "ai", "machine learning"],
+    "devops":     ["devops", "dev ops", "sre", "platform engineer"],
+    "sre":        ["sre", "reliability", "devops"],
+    "pm":         ["product manager", "pm"],
+    "fullstack":  ["full stack", "full-stack", "fullstack"],
+    "fullsatck":  ["full stack", "full-stack", "fullstack"],
+}
+
+
 def _matches_query(job: dict, query: str) -> bool:
     if not query:
         return True
-    tokens = [token.lower() for token in query.split() if token.strip()]
-    haystack = " ".join(
-        [
-            _clean(job.get("title")),
-            _clean(job.get("company")),
-            _clean(job.get("location")),
-            _clean(job.get("job_url")),
-        ]
-    ).lower()
-    return all(token in haystack for token in tokens)
+    title = _clean(job.get("title")).lower()
+    # Cada token del query debe aparecer en el título (con expansión de sinónimos)
+    for raw_token in query.split():
+        token = raw_token.strip().lower()
+        if not token:
+            continue
+        expansions = _SYNONYMS.get(token, [token])
+        if not any(exp in title for exp in expansions):
+            return False
+    return True
 
 
 def _matches_location(job: dict, location: str) -> bool:
@@ -111,7 +128,9 @@ def search_community_jobs(query: str = "", location: str = "", source: str = "al
     for source_name, fetcher in selected:
         try:
             if source_name == "rocketship":
-                source_jobs = fetcher(query=query, limit=limit)
+                source_jobs = fetcher(query="", limit=limit)  # ?q= no filtra en su SSR
+            elif source_name == "arbeitnow":
+                source_jobs = fetcher(query=query)
             else:
                 source_jobs = fetcher()
         except Exception as exc:

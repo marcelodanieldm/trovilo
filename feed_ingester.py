@@ -20,7 +20,7 @@ from datetime import datetime, timezone
 from html import unescape
 from typing import Iterable
 from urllib.error import HTTPError, URLError
-from urllib.parse import urlparse, urlunparse
+from urllib.parse import quote_plus, urlparse, urlunparse
 from urllib.request import Request, urlopen
 from xml.etree import ElementTree as ET
 
@@ -40,11 +40,14 @@ log = logging.getLogger("feed_ingester")
 
 load_dotenv()
 
-REMOTIVE_API_URL = "https://remotive.com/api/remote-jobs"
-WWR_PROGRAMMING_RSS_URL = "https://weworkremotely.com/categories/remote-programming-jobs.rss"
-REMOTEOK_API_URL = "https://remoteok.com/api"
+REMOTIVE_API_URL  = "https://remotive.com/api/remote-jobs"
+WWR_RSS_URL       = "https://weworkremotely.com/categories/remote-programming-jobs.rss"
+REMOTEOK_API_URL  = "https://remoteok.com/api"
 ARBEITNOW_API_URL = "https://www.arbeitnow.com/api/job-board-api"
 CRYPTOJOBSLIST_ATOM_URL = "https://cryptojobslist.com/atom.xml"
+
+# alias legacy
+WWR_PROGRAMMING_RSS_URL = WWR_RSS_URL
 
 HTTP_HEADERS = {
     "User-Agent": (
@@ -125,19 +128,8 @@ def _dedupe_jobs(jobs: Iterable[dict]) -> list[dict]:
 # Remotive API
 # ---------------------------------------------------------------------------
 
-def fetch_remotive_jobs() -> list[dict]:
-    """
-    Consume la API pública de Remotive y normaliza los items.
-
-    Campos fuente:
-      - title
-      - company_name
-      - url
-      - candidate_required_location
-
-    Output:
-      [{'title': title, 'company': company, 'job_url': url, 'location': location}, ...]
-    """
+def fetch_remotive_jobs(query: str = "") -> list[dict]:
+    """Consume la API pública de Remotive. El ?search= no filtra en su API pública."""
     try:
         payload = _http_get(REMOTIVE_API_URL)
         parsed = json.loads(payload.decode("utf-8"))
@@ -155,14 +147,14 @@ def fetch_remotive_jobs() -> list[dict]:
         if not all([title, company, job_url]):
             continue
 
-        jobs.append(
-            {
-                "title": title,
-                "company": company,
-                "job_url": job_url,
-                "location": location,
-            }
-        )
+        tags = " ".join(_clean_text(t) for t in (item.get("tags") or []) if t)
+        jobs.append({
+            "title": title,
+            "company": company,
+            "job_url": job_url,
+            "location": location,
+            "tags": tags,
+        })
 
     log.info("Remotive API: %d oferta(s) normalizada(s).", len(jobs))
     return jobs
@@ -265,21 +257,14 @@ fetch_wwr_rss = fetch_weworkremotely_jobs
 # RemoteOK API
 # ---------------------------------------------------------------------------
 
-def fetch_remoteok_jobs() -> list[dict]:
+def fetch_remoteok_jobs(query: str = "") -> list[dict]:
     """
-    Consume RemoteOK API y normaliza los items.
-
-    RemoteOK devuelve un array JSON cuyo primer elemento puede ser un disclaimer
-    legal. Se ignora todo elemento que no tenga campos de oferta.
-
-    Campos fuente:
-      - position
-      - company
-      - url
-      - tags
+    Consume RemoteOK API. Los tags se guardan en 'tags' para filtrado local.
+    No usamos ?tags= server-side porque RemoteOK lo ignora en la práctica.
     """
+    url = REMOTEOK_API_URL
     try:
-        payload = _http_get(REMOTEOK_API_URL)
+        payload = _http_get(url)
         parsed = json.loads(payload.decode("utf-8"))
     except (HTTPError, URLError, TimeoutError, json.JSONDecodeError) as exc:
         log.error("RemoteOK API: error al descargar/parsear feed: %s", exc)
@@ -293,23 +278,20 @@ def fetch_remoteok_jobs() -> list[dict]:
         title = _clean_text(item.get("position"))
         company = _clean_text(item.get("company"))
         job_url = _sanitize_url(item.get("url") or item.get("apply_url"))
-        tags = item.get("tags") or []
         location = _clean_text(item.get("location") or "Remote")
-
-        if isinstance(tags, list) and tags:
-            location = f"{location} | {' '.join(_clean_text(tag) for tag in tags if tag)}"
+        raw_tags = item.get("tags") or []
+        tags = " ".join(_clean_text(t) for t in raw_tags if t)
 
         if not all([title, company, job_url]):
             continue
 
-        jobs.append(
-            {
-                "title": title,
-                "company": company,
-                "job_url": job_url,
-                "location": location,
-            }
-        )
+        jobs.append({
+            "title": title,
+            "company": company,
+            "job_url": job_url,
+            "location": location,
+            "tags": tags,
+        })
 
     log.info("RemoteOK API: %d oferta(s) normalizada(s).", len(jobs))
     return jobs
@@ -319,18 +301,14 @@ def fetch_remoteok_jobs() -> list[dict]:
 # Arbeitnow API
 # ---------------------------------------------------------------------------
 
-def fetch_arbeitnow_jobs() -> list[dict]:
+def fetch_arbeitnow_jobs(query: str = "") -> list[dict]:
     """
-    Consume Arbeitnow job-board API y normaliza los items.
-
-    Campos fuente:
-      - title
-      - company_name
-      - url
-      - tags
+    Consume Arbeitnow job-board API y normaliza los items (solo remotos).
+    Si se provee query, usa ?search= para filtrar en el servidor.
     """
+    url = ARBEITNOW_API_URL + (f"?search={quote_plus(query)}" if query else "")
     try:
-        payload = _http_get(ARBEITNOW_API_URL)
+        payload = _http_get(url)
         parsed = json.loads(payload.decode("utf-8"))
     except (HTTPError, URLError, TimeoutError, json.JSONDecodeError) as exc:
         log.error("Arbeitnow API: error al descargar/parsear feed: %s", exc)
@@ -338,14 +316,14 @@ def fetch_arbeitnow_jobs() -> list[dict]:
 
     jobs = []
     for item in parsed.get("data", []) if isinstance(parsed, dict) else []:
+        # Arbeitnow incluye trabajos presenciales en Alemania/Europa; solo queremos remotos
+        if not item.get("remote", False):
+            continue
+
         title = _clean_text(item.get("title"))
         company = _clean_text(item.get("company_name"))
         job_url = _sanitize_url(item.get("url"))
-        tags = item.get("tags") or []
-        location = _clean_text(item.get("location") or item.get("job_types") or "Remote")
-
-        if isinstance(tags, list) and tags:
-            location = f"{location} | {' '.join(_clean_text(tag) for tag in tags if tag)}"
+        location = _clean_text(item.get("location") or "Remote")
 
         if not all([title, company, job_url]):
             continue
@@ -368,55 +346,9 @@ def fetch_arbeitnow_jobs() -> list[dict]:
 # ---------------------------------------------------------------------------
 
 def fetch_cryptojobslist_jobs() -> list[dict]:
-    """
-    Consume CryptoJobsList Atom feed y normaliza los entries.
-
-    Campos fuente:
-      - title
-      - author/name
-      - link[@href]
-    """
-    try:
-        xml_bytes = _http_get(CRYPTOJOBSLIST_ATOM_URL)
-        root = ET.fromstring(xml_bytes)
-    except (HTTPError, URLError, TimeoutError, ET.ParseError) as exc:
-        log.error("CryptoJobsList Atom: error al descargar/parsear feed: %s", exc)
-        return []
-
-    ns = {"atom": "http://www.w3.org/2005/Atom"}
-    entries = root.findall("atom:entry", ns) or root.findall(".//entry")
-
-    jobs = []
-    for entry in entries:
-        title = _clean_text(entry.findtext("atom:title", default="", namespaces=ns) or entry.findtext("title"))
-        author = entry.find("atom:author", ns)
-        if author is None:
-            author = entry.find("author")
-        company = ""
-        if author is not None:
-            company = _clean_text(author.findtext("atom:name", default="", namespaces=ns) or author.findtext("name"))
-
-        link_el = entry.find("atom:link", ns)
-        if link_el is None:
-            link_el = entry.find("link")
-        raw_link = link_el.get("href") if link_el is not None else ""
-        job_url = _sanitize_url(raw_link)
-        location = "Remote | Crypto"
-
-        if not all([title, company, job_url]):
-            continue
-
-        jobs.append(
-            {
-                "title": title,
-                "company": company,
-                "job_url": job_url,
-                "location": location,
-            }
-        )
-
-    log.info("CryptoJobsList Atom: %d oferta(s) normalizada(s).", len(jobs))
-    return jobs
+    """CryptoJobsList — feed actualmente inactivo (404). Retorna vacío."""
+    log.info("CryptoJobsList Atom: fuente no disponible, omitida.")
+    return []
 
 
 # ---------------------------------------------------------------------------
