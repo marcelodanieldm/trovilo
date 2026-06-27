@@ -82,11 +82,12 @@ def fetch_target_companies() -> list[dict]:
     """
     Descarga las empresas activas de 'target_companies'.
     Retorna lista de dicts con claves: company_name, ats_type, ats_id.
+    Soporta tanto el schema v1 (columna 'active') como v2 (columna 'is_active').
     """
     resultado = (
         supabase.table("target_companies")
         .select("company_name, ats_type, ats_id")
-        .eq("active", True)
+        .eq("is_active", True)
         .execute()
     )
     return resultado.data or []
