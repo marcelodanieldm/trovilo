@@ -32,6 +32,7 @@ ALL_DOMAINS = [
     "comeet.com",
     "teamtailor.com",
     "recooty.com",
+    "homerun.co",
     # Job boards remotos globales
     "weworkremotely.com",
     "remoteok.com",
@@ -118,7 +119,7 @@ _ROLE_TERMS = (
 )
 
 _EXCLUSIONS = "-inurl:privacy -inurl:terms -inurl:help -inurl:cookie"
-MAX_QUERY_LENGTH = 1500
+MAX_QUERY_LENGTH = 450  # límite seguro para DDG HTML tras URL-encoding
 
 
 # ---------------------------------------------------------------------------
@@ -138,7 +139,7 @@ def generate_duckduckgo_batches(
     tech: str,
     location: str,
     job_type: str,
-    batch_size: int = 10,
+    batch_size: int = 7,
 ) -> Generator[str, None, None]:
     """
     Generador que produce queries de DuckDuckGo en lotes.
@@ -202,15 +203,16 @@ def _build_suffix(tech: str, location: str, job_type: str) -> str:
     """Construye el sufijo compartido por todos los lotes.
 
     Estructura:
-      "tech1" "tech2" ROLE_TERMS(EN+ES) JOB_TYPE(EN+ES) LOCATION(EN+ES) exclusiones
+      "tech1" "tech2" JOB_TYPE(EN+ES) LOCATION(EN+ES) exclusiones
+
+    Nota: _ROLE_TERMS se omite intencionalmente para mantener la query
+    dentro del límite de DDG HTML (~500 chars URL-encoded). No es necesario
+    porque los `site:` ya restringen la búsqueda a job boards.
     """
     parts: list[str] = []
 
     for t in [_sanitize(t) for t in tech.split(",") if t.strip()]:
         parts.append(f'"{t}"')
-
-    # Términos de rol bilingüe (developer | desarrollador | etc.)
-    parts.append(_ROLE_TERMS)
 
     parts.append(_JOB_TYPE_TERMS.get(job_type.strip().lower(), f'"{_sanitize(job_type)}"'))
     parts.append(_LOCATION_TERMS.get(location.strip().lower(), f'"{_sanitize(location)}"'))

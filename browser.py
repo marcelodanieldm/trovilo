@@ -19,33 +19,76 @@ import random
 from contextlib import contextmanager
 from playwright.sync_api import Playwright
 
-# Pool de tres User-Agents reales de escritorio Chrome para rotación aleatoria
+# Pool de User-Agents reales de escritorio Chrome — versiones actuales (jun 2026)
 _USER_AGENTS = [
     (
         "Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
         "AppleWebKit/537.36 (KHTML, like Gecko) "
-        "Chrome/126.0.0.0 Safari/537.36"
+        "Chrome/137.0.0.0 Safari/537.36"
     ),
     (
         "Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
         "AppleWebKit/537.36 (KHTML, like Gecko) "
-        "Chrome/125.0.0.0 Safari/537.36"
+        "Chrome/136.0.0.0 Safari/537.36"
     ),
     (
         "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) "
         "AppleWebKit/537.36 (KHTML, like Gecko) "
-        "Chrome/126.0.0.0 Safari/537.36"
+        "Chrome/137.0.0.0 Safari/537.36"
+    ),
+    (
+        "Mozilla/5.0 (X11; Linux x86_64) "
+        "AppleWebKit/537.36 (KHTML, like Gecko) "
+        "Chrome/136.0.0.0 Safari/537.36"
     ),
 ]
 
-# Script inyectado en cada página antes de que corra cualquier JS del sitio.
-# Elimina navigator.webdriver y simula propiedades de un navegador humano real.
+# Script inyectado en cada página ANTES de que corra cualquier JS del sitio.
+# delete navigator.webdriver elimina la propiedad del prototipo para que retorne
+# undefined (más robusto que Object.defineProperty, evita detección por redefinición).
 _STEALTH_INIT_SCRIPT = """
-Object.defineProperty(navigator, 'webdriver', { get: () => undefined });
+delete navigator.webdriver;
 Object.defineProperty(navigator, 'plugins',   { get: () => [1, 2, 3] });
 Object.defineProperty(navigator, 'languages', { get: () => ['es-419', 'es', 'en'] });
 window.chrome = { runtime: {} };
 """
+
+
+def get_organic_headers() -> dict[str, str]:
+    """
+    Devuelve un diccionario de cabeceras HTTP que imitan exactamente las que
+    envía un Chrome 137 real en Windows 11 al navegar a una página web.
+
+    Incluye cabeceras Client Hints (Sec-Ch-Ua-*) y Sec-Fetch-* que los
+    firewalls anti-bot verifican para confirmar que la petición proviene
+    de un navegador legítimo y no de una herramienta de scraping.
+
+    Retorna:
+        dict con todas las cabeceras listas para pasar a
+        browser_context.new_context(extra_http_headers=...)
+    """
+    return {
+        # Tipos de contenido aceptados — idéntico al orden que usa Chrome 137
+        "Accept": (
+            "text/html,application/xhtml+xml,application/xml;"
+            "q=0.9,image/avif,image/webp,image/apng,*/*;"
+            "q=0.8,application/signed-exchange;v=b3;q=0.7"
+        ),
+        # Codificaciones soportadas — zstd es exclusivo de Chrome 103+
+        "Accept-Encoding": "gzip, deflate, br, zstd",
+        # Idioma preferido — español latinoamericano coherente con el locale
+        "Accept-Language": "es-419,es;q=0.9,en;q=0.8",
+        # Client Hints de marca — tokens exactos de Chrome 137 Chromium
+        "Sec-Ch-Ua": '"Google Chrome";v="137", "Chromium";v="137", "Not/A)Brand";v="24"',
+        "Sec-Ch-Ua-Mobile": "?0",          # escritorio (no móvil)
+        "Sec-Ch-Ua-Platform": '"Windows"',  # plataforma Windows
+        # Metadatos de navegación — indica carga de documento top-level
+        "Sec-Fetch-Dest": "document",
+        "Sec-Fetch-Mode": "navigate",
+        "Sec-Fetch-Site": "none",           # navegación directa (sin referrer)
+        # Redirección automática a HTTPS cuando el sitio lo soporta
+        "Upgrade-Insecure-Requests": "1",
+    }
 
 
 @contextmanager
@@ -72,38 +115,41 @@ def get_stealth_page(playwright: Playwright):
     # Seleccionar un User-Agent distinto en cada sesión
     user_agent = random.choice(_USER_AGENTS)
 
-    # Lanzar Chromium sin los flags que identifican sesiones automatizadas.
-    # ignore_default_args elimina los argumentos que Playwright agrega por defecto.
+    # Lanzar el Chromium bundled de Playwright (más liviano y estable que
+    # channel="chrome" en Windows headless). Para DDG Lite, que es HTML puro
+    # sin JS pesado, el Chromium estándar es suficiente y no recibe CAPTCHAs.
     browser = playwright.chromium.launch(
         headless=True,
         args=[
+            "--disable-blink-features=AutomationControlled",
             "--no-sandbox",
             "--disable-dev-shm-usage",
             "--disable-infobars",
             "--window-size=1920,1080",
         ],
-        ignore_default_args=[
-            "--enable-automation",                      # desactiva el modo automatización de Chrome
-            "--disable-blink-features=AutomationControlled",  # evita exponer señales de blink
-        ],
+        ignore_default_args=["--enable-automation"],
     )
 
-    # Crear contexto con perfil de escritorio realista e ignorar errores HTTPS
+    # Crear contexto con perfil de escritorio realista e ignorar errores HTTPS.
+    # get_organic_headers() provee cabeceras Client Hints y Sec-Fetch-* exactas
+    # de Chrome 137 en Windows 11, haciendo cada petición indistinguible de
+    # un navegador real para los firewalls anti-bot.
     context = browser.new_context(
         user_agent=user_agent,
         viewport={"width": 1920, "height": 1080},
         locale="es-419",
         timezone_id="America/Argentina/Buenos_Aires",
-        ignore_https_errors=True,  # evitar interrupciones por certificados inválidos
-        extra_http_headers={
-            "Accept-Language": "es-419,es;q=0.9,en;q=0.8",  # coherente con el locale
-        },
+        ignore_https_errors=True,
+        extra_http_headers=get_organic_headers(),
     )
 
-    # Inyectar el script de sigilo antes de que cargue cualquier página
+    # Inyectar a nivel de contexto (todas las páginas y frames)
     context.add_init_script(_STEALTH_INIT_SCRIPT)
 
     page = context.new_page()
+
+    # Inyectar también a nivel de página para asegurar ejecución en el frame principal
+    page.add_init_script(_STEALTH_INIT_SCRIPT)
 
     try:
         yield page, context  # devolver ambos para permitir uso avanzado del llamador

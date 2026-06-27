@@ -19,6 +19,11 @@ Funciones principales:
 Ambas devuelven: [{'title': str, 'company': str, 'url': str}, ...]
 """
 import time
+import random
+from urllib.parse import urlparse, parse_qs, unquote, quote_plus
+from playwright.sync_api import sync_playwright, Page
+from browser import get_stealth_page
+from cleaners import clean_google_result, clean_and_verify_results
 
 # Dominios ATS válidos — se usan para filtrar resultados de búsqueda
 _ATS_DOMAINS = [
@@ -26,11 +31,17 @@ _ATS_DOMAINS = [
     "jobs.lever.co",
     "apply.workable.com",
     "jobs.ashbyhq.com",
+    "breezy.hr",
+    "recruitee.com",
+    "teamtailor.com",
+    "homerun.co",
+    "pinpointhq.com",
 ]
 
 # URLs de los motores de búsqueda
-_DDG_URL    = "https://duckduckgo.com"       # más permisivo para scraping
-_GOOGLE_URL = "https://www.google.com"      # mayor cobertura, más restricciones
+# DDG Lite: versión texto puro, sin JS pesado, raramente dispara captchas
+_DDG_LITE_URL = "https://duckduckgo.com/lite/?q="
+_GOOGLE_URL   = "https://www.google.com"    # mayor cobertura, más restricciones
 
 
 # ---------------------------------------------------------------------------
@@ -120,40 +131,55 @@ def _extract_company(url: str) -> str:
         return "Desconocida"
 
 
-def _extract_results_ddg(page: Page) -> list[dict]:
+def _extract_results_ddg_lite(page: Page) -> list[dict]:
     """
-    Extrae resultados de DuckDuckGo.
-    Recorre todos los <a href> y filtra los que apunten a dominios ATS.
+    Motor de extracción para DuckDuckGo Lite.
+
+    Estrategia en dos capas para cubrir variaciones de markup entre versiones:
+      Capa 1 — selector canónico: <a class="result-link">
+               El HTML de DDG Lite usa esta clase en todos sus resultados.
+      Capa 2 — fallback por filas: recorre cada <tr> y extrae cualquier
+               <a href> cuya URL apunte a un dominio ATS conocido.
+               Cubre casos donde DDG cambia nombres de clase sin previo aviso.
     """
     jobs: list[dict] = []
     seen_urls: set[str] = set()
 
-    for link in page.query_selector_all("a[href]"):
+    def _add_if_valid(href: str, raw_title: str) -> None:
+        """Valida, limpia y agrega un resultado al acumulador."""
+        if not href or not _is_job_url(href) or href in seen_urls:
+            return
+        title = raw_title.strip()
+        if not title or len(title) < 4:
+            return
+        parsed = clean_google_result(title, href)
+        seen_urls.add(href)
+        jobs.append({"title": parsed["title"], "company": parsed["company"], "url": href})
+
+    # --- Capa 1: selector canónico de DDG Lite ---
+    for link in page.query_selector_all("a.result-link"):
         try:
-            raw_href = link.get_attribute("href") or ""
-            url = _resolve_ddg_redirect(raw_href)
-
-            if not _is_job_url(url) or url in seen_urls:
-                continue
-
-            title = link.inner_text().strip()
-            if not title:
-                heading = link.query_selector("h2, h3")
-                if heading:
-                    title = heading.inner_text().strip()
-
-            if not title or len(title) < 4:
-                continue
-
-            # Limpiar y separar título / empresa usando el helper de cleaners
-            parsed  = clean_google_result(title, url)
-            seen_urls.add(url)
-            jobs.append({"title": parsed["title"], "company": parsed["company"], "url": url})
-
+            _add_if_valid(
+                link.get_attribute("href") or "",
+                link.inner_text(),
+            )
         except Exception:
             continue
 
-    return jobs
+    # --- Capa 2: fallback por filas de tabla ---
+    # Solo se activa si la capa 1 no encontró nada (por cambio de markup).
+    if not jobs:
+        for row in page.query_selector_all("tr"):
+            try:
+                for anchor in row.query_selector_all("a[href]"):
+                    _add_if_valid(
+                        anchor.get_attribute("href") or "",
+                        anchor.inner_text(),
+                    )
+            except Exception:
+                continue
+
+    return clean_and_verify_results(jobs)
 
 
 def _extract_results_google(page: Page) -> list[dict]:
@@ -199,6 +225,25 @@ def _extract_results_google(page: Page) -> list[dict]:
     return jobs
 
 
+def simulate_human_behavior(page: Page) -> None:
+    """
+    Rompe patrones estáticos de bot moviendo el mouse a coordenadas aleatorias
+    dentro del viewport y haciendo un micro-scroll aleatorio arriba/abajo.
+    Llamar antes de ejecutar búsquedas o interactuar con elementos.
+    """
+    # Movimiento de mouse a posición aleatoria dentro del viewport (1920x1080)
+    x = random.randint(100, 1820)
+    y = random.randint(100, 980)
+    page.mouse.move(x, y)
+    time.sleep(random.uniform(0.1, 0.3))
+
+    # Micro-scroll aleatorio hacia abajo y luego de regreso arriba
+    page.evaluate("window.scrollBy(0, Math.floor(Math.random() * 200))")
+    time.sleep(random.uniform(0.1, 0.25))
+    page.evaluate("window.scrollBy(0, -Math.floor(Math.random() * 100))")
+    time.sleep(random.uniform(0.1, 0.2))
+
+
 def _scroll_gradual(page: Page) -> None:
     """Scroll gradual compartido — simula lectura humana en ambos motores."""
     page.evaluate("""
@@ -225,8 +270,14 @@ def scrape_jobs_via_duckduckgo(
     tech: str, location: str, job_type: str
 ) -> list[dict]:
     """
-    Busca ofertas en plataformas ATS usando DuckDuckGo.
-    Simula comportamiento humano: tipeo caracter a caracter y scroll gradual.
+    Busca ofertas en plataformas ATS usando DuckDuckGo Lite (HTML puro).
+
+    Características:
+      - Navega directamente a la URL de búsqueda sin interactuar con inputs.
+      - Cada llamada abre y cierra un browser context fresco, eliminando
+        cookies, session storage y cualquier estado de sesión anterior.
+      - Jitter aleatorio de 5.2–10.7 s después de cerrar el browser,
+        enfriando la IP entre batches consecutivos.
 
     Parámetros:
         tech      -- tecnología o stack buscado, ej. "Python"
@@ -237,27 +288,31 @@ def scrape_jobs_via_duckduckgo(
         Lista de dicts: [{'title': str, 'company': str, 'url': str}, ...]
     """
     query = _build_query(tech, location, job_type)
+    url   = f"{_DDG_LITE_URL}{quote_plus(query)}"
 
+    results: list[dict] = []
+
+    # sync_playwright() como context manager garantiza que el proceso del
+    # browser se cierra completamente al salir del bloque, flushándose
+    # cookies, localStorage y sessionStorage sin necesidad de llamadas
+    # explícitas a context.clear_cookies() o storage_state().
     with sync_playwright() as pw:
         with get_stealth_page(pw) as (page, _ctx):
 
-            # Navegar a DuckDuckGo y esperar el campo de búsqueda
-            page.goto(_DDG_URL, wait_until="domcontentloaded", timeout=30_000)
-            page.wait_for_selector("input[name='q']", timeout=10_000)
+            # Navegación directa: sin tipeo, sin JS pesado, sin fingerprinting
+            page.goto(url, wait_until="domcontentloaded", timeout=30_000)
 
-            # Escribir la query simulando tipeo humano
-            _type_humanlike(page, "input[name='q']", query)
-            page.keyboard.press("Enter")
+            # Movimiento de mouse y micro-scroll antes de leer el DOM
+            simulate_human_behavior(page)
 
-            # Esperar resultados y renderizado JS
-            page.wait_for_load_state("domcontentloaded", timeout=20_000)
-            time.sleep(random.uniform(2.0, 3.5))
+            results = _extract_results_ddg_lite(page)
 
-            _scroll_gradual(page)
+    # El browser ya cerró — el jitter corre sin recursos de red activos.
+    # random.uniform(5.2, 10.7) da una ventana amplia para evadir detección
+    # de patrones de timing regulares.
+    time.sleep(random.uniform(5.2, 10.7))
 
-            return _extract_results_ddg(page)
-
-    return []
+    return results
 
 
 def scrape_jobs_via_google(
@@ -292,6 +347,9 @@ def scrape_jobs_via_google(
                 if page.locator("textarea[name='q']").count() > 0
                 else "input[name='q']"
             )
+
+            # Simular comportamiento humano antes de interactuar
+            simulate_human_behavior(page)
 
             # Escribir la query simulando tipeo humano
             _type_humanlike(page, input_selector, query)

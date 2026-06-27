@@ -54,6 +54,7 @@ ATS_DOMAINS = [
 ]
 
 DDG_HTML_URL = "https://html.duckduckgo.com/html/"
+BING_SEARCH_URL = "https://www.bing.com/search"  # reemplazo anti-CAPTCHA de DDG HTML
 
 
 # ---------------------------------------------------------------------------
@@ -133,6 +134,9 @@ def is_valid_job_url(url: str) -> bool:
             "recruitee.com",
             "bamboohr.com",
             "jobs.smartrecruiters.com",
+            "teamtailor.com",
+            "homerun.co",
+            "pinpointhq.com",
         )
         if not any(d in hostname for d in valid_domains):
             return False
@@ -158,6 +162,17 @@ def _extract_results_from_page(page, seen_urls: set) -> list[dict]:
     """Extrae ofertas ATS de la página actual de DuckDuckGo HTML."""
     jobs = []
     result_links = page.query_selector_all(".result__url, .result__a")
+
+    # Debug: si DDG no devolvió ningún selector, volcar el body completo
+    if not result_links:
+        log.warning("_extract_results_from_page: 0 selectores '.result__url/.result__a' — "
+                    "puede ser bloqueo o CAPTCHA. Volcando body para diagnóstico:")
+        try:
+            body_text = page.inner_text("body")
+            print("[DDG DEBUG] URL actual:", page.url)
+            print("[DDG DEBUG] body text (primeros 3000 chars):\n", body_text[:3000])
+        except Exception as _dbg_err:
+            print("[DDG DEBUG] no se pudo leer el body:", _dbg_err)
 
     for el in result_links:
         try:
@@ -225,7 +240,8 @@ def run_massive_scraping(
 
         try:
             page.goto(DDG_HTML_URL, wait_until="domcontentloaded", timeout=30_000)
-            time.sleep(random.uniform(1.0, 2.0))
+            # Espera extendida para garantizar renderizado completo y reducir detección bot
+            time.sleep(random.uniform(4.0, 8.0))
 
             search_input = page.query_selector("input[name='q']")
             if not search_input:
@@ -274,6 +290,46 @@ def run_massive_scraping(
 # Scraping masivo indestructible — navega por URL directa
 # ---------------------------------------------------------------------------
 
+def _extract_results_from_bing(page, seen_urls: set) -> list[dict]:
+    """
+    Extrae ofertas ATS de la página actual de Bing.
+    Selector: #b_results li.b_algo h2 a  — el enlace principal de cada resultado orgánico.
+    """
+    jobs = []
+    result_links = page.query_selector_all("#b_results li.b_algo h2 a")
+
+    # Debug: si Bing no devuelve ningún resultado, volcar el body
+    if not result_links:
+        log.warning("_extract_results_from_bing: 0 resultados en '#b_results li.b_algo h2 a' — "
+                    "posible CAPTCHA o cambio de estructura. Volcando body:")
+        try:
+            body_text = page.inner_text("body")
+            print("[BING DEBUG] URL actual:", page.url)
+            print("[BING DEBUG] body text (primeros 3000 chars):\n", body_text[:3000])
+        except Exception as _dbg_err:
+            print("[BING DEBUG] no se pudo leer el body:", _dbg_err)
+
+    for link in result_links:
+        try:
+            url   = link.get_attribute("href") or ""
+            title = _clean_title(link.inner_text().strip())
+
+            if not url or not is_valid_job_url(url):
+                continue
+            if url in seen_urls:
+                continue
+            seen_urls.add(url)
+
+            company = _extract_company(url)
+            if title and url:
+                jobs.append({"title": title, "company": company, "url": url})
+
+        except Exception:
+            continue
+
+    return jobs
+
+
 def execute_unbreakable_scraping(
     page: Page,
     tech: str,
@@ -281,15 +337,15 @@ def execute_unbreakable_scraping(
     job_type: str,
 ) -> list[dict]:
     """
-    Scraping masivo resistente a fallos. Por cada lote de query_builder:
-      1. Construye la URL directa: https://html.duckduckgo.com/html/?q={query}
-      2. Navega directamente (sin rellenar formulario — más estable)
-      3. Extrae resultados de página 1 y página 2 si existe botón "Next"
-      4. Si el batch falla por timeout o error de parsing → log.warning + continue
-      5. Jitter de 3-6 s al final de cada batch (firma humana)
+    Scraping masivo resistente a fallos usando Bing como motor de búsqueda.
+    DDG HTML fue descartado porque sirve un CAPTCHA visual a Playwright headless.
 
-    Ventaja sobre run_massive_scraping: al navegar por URL directa evita
-    depender del selector del formulario de DDG, que puede cambiar.
+    Por cada lote de query_builder:
+      1. Construye la URL: https://www.bing.com/search?q={query}
+      2. Navega directamente y espera renderizado (4-8 s)
+      3. Extrae resultados página 1 con _extract_results_from_bing
+      4. Página 2 si Bing tiene más resultados (&first=11)
+      5. Jitter de 3-6 s entre batches
     """
     batches   = list(generate_duckduckgo_batches(tech, location, job_type))
     jobs: list[dict] = []
@@ -297,35 +353,34 @@ def execute_unbreakable_scraping(
     total = len(batches)
 
     log.info(
-        "execute_unbreakable_scraping — %d lotes | tech='%s' location='%s' job_type='%s'",
+        "execute_unbreakable_scraping (Bing) — %d lotes | tech='%s' location='%s' job_type='%s'",
         total, tech, location, job_type,
     )
 
     for idx, query in enumerate(batches, start=1):
-        encoded_url = f"https://html.duckduckgo.com/html/?q={quote_plus(query)}"
+        url_p1 = f"{BING_SEARCH_URL}?q={quote_plus(query)}&setlang=es"
         log.info("Batch %d/%d — %d chars", idx, total, len(query))
 
         try:
-            page.goto(encoded_url, wait_until="domcontentloaded", timeout=30_000)
-            time.sleep(random.uniform(1.0, 2.0))
+            page.goto(url_p1, wait_until="networkidle", timeout=30_000)
+            # Pausa corta post-carga para renderizado final
+            time.sleep(random.uniform(2.0, 4.0))
 
             # Página 1
             before = len(jobs)
-            jobs.extend(_extract_results_from_page(page, seen_urls))
+            jobs.extend(_extract_results_from_bing(page, seen_urls))
             log.info("Batch %d — página 1: %d ofertas nuevas", idx, len(jobs) - before)
 
-            # Página 2 si existe botón "Next"
-            next_btn = page.query_selector(".nav-link form")
-            if next_btn:
-                try:
-                    next_btn.evaluate("form => form.submit()")
-                    page.wait_for_load_state("domcontentloaded", timeout=20_000)
-                    time.sleep(random.uniform(1.0, 2.0))
-                    before2 = len(jobs)
-                    jobs.extend(_extract_results_from_page(page, seen_urls))
-                    log.info("Batch %d — página 2: %d ofertas nuevas", idx, len(jobs) - before2)
-                except Exception as e:
-                    log.warning("Batch %d: error en página 2 — %s", idx, e)
+            # Página 2: Bing pagina con &first=11
+            url_p2 = f"{BING_SEARCH_URL}?q={quote_plus(query)}&setlang=es&first=11"
+            try:
+                page.goto(url_p2, wait_until="networkidle", timeout=20_000)
+                time.sleep(random.uniform(1.5, 3.0))
+                before2 = len(jobs)
+                jobs.extend(_extract_results_from_bing(page, seen_urls))
+                log.info("Batch %d — página 2: %d ofertas nuevas", idx, len(jobs) - before2)
+            except Exception as e:
+                log.warning("Batch %d: error en página 2 — %s", idx, e)
 
         except Exception as e:
             log.warning(

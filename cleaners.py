@@ -29,6 +29,10 @@ _TRAILING_NOISE = [
     r"\s*[\|\-–]\s*Ashby\b.*$",
     r"\s*[\|\-–]\s*Jobs\b\s*$",
     r"\s*\|\s*Apply\b.*$",
+    # Residuo de motores de búsqueda
+    r"\s*[\|\-–]\s*DuckDuckGo\b.*$",
+    r"\s*[\|\-–]\s*Bing\b.*$",
+    r"\s*[\|\-–]\s*Google\b.*$",
 ]
 
 # Compilar todos los patrones una sola vez al importar el módulo
@@ -95,6 +99,74 @@ def _split_title_company(text: str, url_company: str) -> tuple[str, str]:
 
     # Sin separador encontrado — todo es el título
     return text, url_company.title() if url_company else "Desconocida"
+
+
+# ---------------------------------------------------------------------------
+# Patrones de URL inválidas — usados por clean_and_verify_results()
+# ---------------------------------------------------------------------------
+
+# Segmentos de ruta que indican que la URL no es una oferta de trabajo
+_INVALID_URL_SEGMENTS = re.compile(
+    r"/(captcha|settings|search|feedback|login|logout|privacy|terms|cookies)",
+    re.IGNORECASE,
+)
+
+# Mínimo de caracteres que debe tener una URL para ser válida
+_MIN_URL_LENGTH = 15
+
+
+def clean_and_verify_results(raw_results: list[dict]) -> list[dict]:
+    """
+    Filtra falsos positivos de la lista de resultados extraídos por el scraper
+    y sanea los títulos eliminando residuo de motores de búsqueda.
+
+    Descarta un resultado si:
+      - La URL tiene menos de 15 caracteres.
+      - La URL contiene segmentos de ruta no-laborales (/captcha, /settings,
+        /search, /feedback, /login, /logout, /privacy, /terms, /cookies).
+
+    Sanea el título:
+      - Aplica _strip_noise() para remover sufijos como '| DuckDuckGo',
+        '- Job Board', '| Greenhouse', etc.
+      - Elimina espacios extra y caracteres de control.
+
+    Parámetros:
+        raw_results -- lista de dicts {'title': str, 'company': str, 'url': str}
+
+    Retorna:
+        Lista limpia y deduplicada de dicts válidos.
+    """
+    clean: list[dict] = []
+    seen_urls: set[str] = set()
+
+    for item in raw_results:
+        url   = (item.get("url")   or "").strip()
+        title = (item.get("title") or "").strip()
+
+        # --- Filtro 1: URL demasiado corta ---
+        if len(url) < _MIN_URL_LENGTH:
+            continue
+
+        # --- Filtro 2: segmentos de ruta no-laborales ---
+        if _INVALID_URL_SEGMENTS.search(url):
+            continue
+
+        # --- Filtro 3: deduplicación por URL exacta ---
+        if url in seen_urls:
+            continue
+
+        # --- Saneado de título: remover residuo de motor de búsqueda ---
+        title = _strip_noise(title)
+        title = " ".join(title.split())   # colapsar espacios múltiples y saltos
+
+        seen_urls.add(url)
+        clean.append({
+            "title":   title   or "Sin título",
+            "company": (item.get("company") or "").strip() or "Desconocida",
+            "url":     url,
+        })
+
+    return clean
 
 
 # ---------------------------------------------------------------------------
