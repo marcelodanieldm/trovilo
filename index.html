@@ -27,6 +27,11 @@
       #fuentesList::-webkit-scrollbar { width: 4px; }
       #fuentesList::-webkit-scrollbar-track { background: transparent; }
       #fuentesList::-webkit-scrollbar-thumb { background: #374151; border-radius: 2px; }
+
+      /* Scrollbar delgada para resultados del buscador */
+      #jobResultsContainer::-webkit-scrollbar { width: 4px; }
+      #jobResultsContainer::-webkit-scrollbar-track { background: transparent; }
+      #jobResultsContainer::-webkit-scrollbar-thumb { background: #3f3f46; border-radius: 2px; }
     </style>
   </head>
 
@@ -173,6 +178,11 @@
               class="sidebar-nav-item w-full flex items-center gap-2.5 px-3 py-2.5 rounded-lg text-sm font-medium transition">
               <span class="text-base leading-none">🌐</span>
               Fuentes
+            </button>
+            <button id="navBuscador" onclick="switchPanel('buscador')"
+              class="sidebar-nav-item w-full flex items-center gap-2.5 px-3 py-2.5 rounded-lg text-sm font-medium transition">
+              <span class="text-base leading-none">💼</span>
+              Buscador
             </button>
           </nav>
 
@@ -441,6 +451,61 @@
             </div><!-- /grid -->
           </div><!-- /panelFuentes -->
 
+          <!-- ══ PANEL: BUSCADOR ════════════════════════════════════ -->
+          <div id="panelBuscador" class="hidden px-5 pt-10 pb-12">
+
+            <!-- Encabezado + campo de búsqueda centrado -->
+            <div class="max-w-2xl mx-auto mb-1">
+              <p class="text-[10px] uppercase tracking-widest text-zinc-600 text-center mb-5">Buscador minimalista</p>
+              <input
+                id="jobSearchInput"
+                type="search"
+                placeholder="Buscar puestos, tecnologías o empresas..."
+                oninput="_filterJobs(this.value)"
+                autocomplete="off"
+                class="w-full rounded-xl bg-zinc-900 border border-zinc-700 text-white text-base
+                       placeholder-zinc-600 px-5 py-4
+                       focus:outline-none focus:ring-2 focus:ring-zinc-600 focus:border-zinc-600
+                       transition"
+              />
+
+              <!-- Filtros de tiempo -->
+              <div class="flex items-center gap-1.5 mt-3">
+                <button id="timeBtn-0"  onclick="_setTimeFilter(0)"
+                  class="time-filter-btn px-3 py-1 rounded-full text-xs border font-medium transition
+                         bg-zinc-700 text-white border-zinc-600">
+                  Todas
+                </button>
+                <button id="timeBtn-24" onclick="_setTimeFilter(24)"
+                  class="time-filter-btn px-3 py-1 rounded-full text-xs border font-medium transition
+                         text-zinc-500 border-zinc-800 hover:border-zinc-600 hover:text-zinc-300">
+                  24 horas
+                </button>
+                <button id="timeBtn-48" onclick="_setTimeFilter(48)"
+                  class="time-filter-btn px-3 py-1 rounded-full text-xs border font-medium transition
+                         text-zinc-500 border-zinc-800 hover:border-zinc-600 hover:text-zinc-300">
+                  48 horas
+                </button>
+                <button id="timeBtn-72" onclick="_setTimeFilter(72)"
+                  class="time-filter-btn px-3 py-1 rounded-full text-xs border font-medium transition
+                         text-zinc-500 border-zinc-800 hover:border-zinc-600 hover:text-zinc-300">
+                  72 horas
+                </button>
+                <span id="jobResultsCount" class="ml-auto text-[11px] text-zinc-700"></span>
+              </div>
+            </div>
+
+            <!-- Lista densa de resultados -->
+            <div
+              id="jobResultsContainer"
+              class="max-w-2xl mx-auto rounded-xl border border-zinc-800 overflow-hidden overflow-y-auto"
+              style="max-height: calc(100vh - 260px)"
+            >
+              <p class="text-xs text-zinc-600 py-8 text-center">Cargando ofertas…</p>
+            </div>
+
+          </div><!-- /panelBuscador -->
+
           <!-- ══ PANEL: MIEMBROS ═════════════════════════════════════ -->
           <div id="panelMiembros" class="hidden max-w-4xl mx-auto px-5 py-8">
 
@@ -590,7 +655,7 @@
 
       // ─── Panel switching ──────────────────────────────────────────────────
       function switchPanel(name) {
-        const panels = ["busqueda", "fuentes", "miembros"];
+        const panels = ["busqueda", "fuentes", "miembros", "buscador"];
         for (const p of panels) {
           document.getElementById(`panel${p.charAt(0).toUpperCase() + p.slice(1)}`).classList.toggle("hidden", p !== name);
           document.getElementById(`nav${p.charAt(0).toUpperCase() + p.slice(1)}`).classList.toggle("active", p === name);
@@ -598,6 +663,7 @@
 
         if (name === "fuentes")   loadFuentesList();
         if (name === "miembros")  loadMembersTable();
+        if (name === "buscador")  fetchLiveJobs();
 
         // Cerrar sidebar en mobile
         const sidebar = document.getElementById("sidebar");
@@ -927,6 +993,123 @@
 
       function escapeHtml(str) {
         return String(str ?? "").replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;");
+      }
+
+      // ─── Buscador minimalista ─────────────────────────────────────────────
+
+      // Cache local de todas las ofertas descargadas desde sent_jobs
+      let localJobsCache   = [];
+      let _activeTimeFilter = 0; // 0 = todas, 24/48/72 = últimas N horas
+
+      // Descarga todas las ofertas de sent_jobs y las guarda en localJobsCache
+      async function fetchLiveJobs() {
+        const container = document.getElementById("jobResultsContainer");
+        const countEl   = document.getElementById("jobResultsCount");
+        container.innerHTML = '<p class="text-xs text-zinc-600 py-8 text-center animate-pulse">Cargando ofertas…</p>';
+        if (countEl) countEl.textContent = "";
+
+        // Resetear al entrar a la vista: input limpio, filtro = Todas
+        const input = document.getElementById("jobSearchInput");
+        if (input) input.value = "";
+        _activeTimeFilter = 0;
+        _updateTimeFilterUI(0);
+
+        try {
+          const { data, error } = await db
+            .from("sent_jobs")
+            .select("title, company, job_url, sent_at")
+            .order("sent_at", { ascending: false });
+
+          if (error) throw error;
+
+          localJobsCache = data || [];
+          _renderJobList(localJobsCache);
+        } catch (e) {
+          container.innerHTML = `<p class="text-xs text-red-400 py-6 text-center">Error al cargar: ${escapeHtml(e.message)}</p>`;
+        }
+      }
+
+      // Actualiza el estilo visual de los pills sin disparar un re-render
+      function _updateTimeFilterUI(hours) {
+        document.querySelectorAll(".time-filter-btn").forEach(btn => {
+          const isActive = btn.id === `timeBtn-${hours}`;
+          btn.classList.toggle("bg-zinc-700",     isActive);
+          btn.classList.toggle("text-white",      isActive);
+          btn.classList.toggle("border-zinc-600", isActive);
+          btn.classList.toggle("text-zinc-500",   !isActive);
+          btn.classList.toggle("border-zinc-800", !isActive);
+        });
+      }
+
+      // Cambia el filtro de tiempo activo y re-renderiza
+      function _setTimeFilter(hours) {
+        _activeTimeFilter = hours;
+        _updateTimeFilterUI(hours);
+        const query = document.getElementById("jobSearchInput")?.value ?? "";
+        _filterJobs(query);
+      }
+
+      // Aplica filtro de tiempo + texto sobre localJobsCache y re-renderiza
+      function _filterJobs(query) {
+        const q = query.trim().toLowerCase();
+
+        // 1. Filtro de tiempo
+        let filtered = localJobsCache;
+        if (_activeTimeFilter > 0) {
+          const cutoff = Date.now() - _activeTimeFilter * 3_600_000;
+          filtered = filtered.filter(j => new Date(j.sent_at).getTime() >= cutoff);
+        }
+
+        // 2. Filtro de texto
+        if (q) {
+          filtered = filtered.filter(j =>
+            (j.title   ?? "").toLowerCase().includes(q) ||
+            (j.company ?? "").toLowerCase().includes(q) ||
+            (j.job_url ?? "").toLowerCase().includes(q)
+          );
+        }
+
+        _renderJobList(filtered);
+      }
+
+      // Convierte una fecha ISO a texto relativo en español
+      function _relativeTime(dateStr) {
+        const diff  = Math.max(0, Date.now() - new Date(dateStr).getTime());
+        const mins  = Math.floor(diff / 60_000);
+        const hours = Math.floor(diff / 3_600_000);
+        const days  = Math.floor(diff / 86_400_000);
+        if (mins  < 1)  return "Ahora";
+        if (mins  < 60) return `Hace ${mins} min`;
+        if (hours < 24) return `Hace ${hours} h`;
+        if (days  < 7)  return `Hace ${days}d`;
+        return new Date(dateStr).toLocaleDateString("es-AR", { day: "numeric", month: "short" });
+      }
+
+      // Renderiza la lista de ofertas en alta densidad
+      function _renderJobList(jobs) {
+        const container = document.getElementById("jobResultsContainer");
+        const countEl   = document.getElementById("jobResultsCount");
+
+        if (countEl) {
+          countEl.textContent = jobs.length
+            ? `${jobs.length} oferta${jobs.length !== 1 ? "s" : ""}`
+            : "";
+        }
+
+        if (!jobs.length) {
+          container.innerHTML = '<p class="text-xs text-zinc-500 py-10 text-center">No se encontraron ofertas coincidentes.</p>';
+          return;
+        }
+
+        container.innerHTML = jobs.map(job => `
+          <a href="${escapeHtml(job.job_url)}" target="_blank" rel="noopener noreferrer"
+             class="flex items-center gap-3 px-4 py-2.5 border-b border-zinc-800/70
+                    hover:bg-zinc-800/50 transition group">
+            <span class="flex-1 min-w-0 text-sm font-semibold text-white truncate
+                         group-hover:text-indigo-300 transition">${escapeHtml(job.title)}</span>
+            <span class="hidden sm:block shrink-0 text-xs text-zinc-400 max-w-[160px] truncate">${escapeHtml(job.company)}</span>
+            <span class="shrink-0 text-[11px] text-zinc-600 tabular-nums">${_relativeTime(job.sent_at)}</span>
+          </a>`).join("");
       }
 
       // ─── Expandir Fuentes ─────────────────────────────────────────────────
