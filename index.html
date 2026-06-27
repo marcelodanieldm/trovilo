@@ -164,6 +164,11 @@
               <span class="text-base leading-none">🔍</span>
               Búsqueda
             </button>
+            <button id="navMiembros" onclick="switchPanel('miembros')"
+              class="sidebar-nav-item w-full flex items-center gap-2.5 px-3 py-2.5 rounded-lg text-sm font-medium transition">
+              <span class="text-base leading-none">👥</span>
+              Miembros
+            </button>
             <button id="navFuentes" onclick="switchPanel('fuentes')"
               class="sidebar-nav-item w-full flex items-center gap-2.5 px-3 py-2.5 rounded-lg text-sm font-medium transition">
               <span class="text-base leading-none">🌐</span>
@@ -290,24 +295,6 @@
 
               <div id="statusMsg" class="mt-5 hidden text-sm text-center rounded-lg px-4 py-3 font-medium"></div>
 
-              <!-- Tabla de miembros -->
-              <div id="membersSection" class="hidden mt-6">
-                <h3 class="text-sm font-semibold text-gray-300 mb-3">👥 Miembros del canal</h3>
-                <div class="overflow-x-auto rounded-lg border border-gray-700">
-                  <table class="w-full text-xs text-left">
-                    <thead class="bg-gray-800 text-gray-400 uppercase tracking-wide">
-                      <tr>
-                        <th class="px-3 py-2">Usuario</th>
-                        <th class="px-3 py-2">Tecnologías</th>
-                        <th class="px-3 py-2">Modalidad</th>
-                        <th class="px-3 py-2">Ubicación</th>
-                        <th class="px-3 py-2"></th>
-                      </tr>
-                    </thead>
-                    <tbody id="membersTableBody" class="divide-y divide-gray-700/50 text-gray-300"></tbody>
-                  </table>
-                </div>
-              </div>
             </div><!-- /card búsqueda -->
           </div><!-- /panelBusqueda -->
 
@@ -454,6 +441,46 @@
             </div><!-- /grid -->
           </div><!-- /panelFuentes -->
 
+          <!-- ══ PANEL: MIEMBROS ═════════════════════════════════════ -->
+          <div id="panelMiembros" class="hidden max-w-4xl mx-auto px-5 py-8">
+
+            <div class="mb-7 flex items-center justify-between">
+              <div>
+                <h2 class="text-xl font-bold text-white">Miembros</h2>
+                <p class="mt-1 text-sm text-gray-400">Criterios de búsqueda registrados por usuario</p>
+              </div>
+              <span id="membersCount" class="text-xs bg-indigo-900/60 text-indigo-300 border border-indigo-800/60 rounded-full px-2.5 py-0.5 font-semibold"></span>
+            </div>
+
+            <div class="bg-gray-900 rounded-2xl shadow-xl overflow-hidden">
+              <div class="overflow-x-auto">
+                <table class="w-full text-sm text-left">
+                  <thead class="bg-gray-800/80 text-gray-400 text-xs uppercase tracking-wide border-b border-gray-700">
+                    <tr>
+                      <th class="px-4 py-3">Usuario</th>
+                      <th class="px-4 py-3">Tecnologías</th>
+                      <th class="px-4 py-3">Modalidad</th>
+                      <th class="px-4 py-3">Ubicación</th>
+                      <th class="px-4 py-3 text-right">Acciones</th>
+                    </tr>
+                  </thead>
+                  <tbody id="membersTableBody" class="divide-y divide-gray-800 text-gray-300"></tbody>
+                </table>
+              </div>
+
+              <!-- Estado vacío -->
+              <div id="membersEmpty" class="hidden py-16 text-center">
+                <p class="text-2xl mb-2">👤</p>
+                <p class="text-sm text-gray-500">No hay miembros registrados aún.</p>
+              </div>
+
+              <!-- Estado cargando -->
+              <div id="membersLoading" class="py-10 text-center">
+                <p class="text-xs text-gray-500 animate-pulse">Cargando miembros…</p>
+              </div>
+            </div>
+          </div><!-- /panelMiembros -->
+
         </main>
       </div><!-- /flex body -->
 
@@ -533,8 +560,6 @@
       const filterForm     = document.getElementById("filterForm");
       const submitBtn      = document.getElementById("submitBtn");
       const statusMsg      = document.getElementById("statusMsg");
-      const membersSection = document.getElementById("membersSection");
-      const membersTableBody = document.getElementById("membersTableBody");
 
       // ─── Gestión de vistas ────────────────────────────────────────────────
 
@@ -551,7 +576,6 @@
         dashboardView.classList.add("hidden");
         filterForm.reset();
         statusMsg.classList.add("hidden");
-        membersSection.classList.add("hidden");
         loginView.classList.remove("hidden");
       }
 
@@ -566,20 +590,18 @@
 
       // ─── Panel switching ──────────────────────────────────────────────────
       function switchPanel(name) {
-        // Panels
-        document.getElementById("panelBusqueda").classList.toggle("hidden", name !== "busqueda");
-        document.getElementById("panelFuentes").classList.toggle("hidden",  name !== "fuentes");
+        const panels = ["busqueda", "fuentes", "miembros"];
+        for (const p of panels) {
+          document.getElementById(`panel${p.charAt(0).toUpperCase() + p.slice(1)}`).classList.toggle("hidden", p !== name);
+          document.getElementById(`nav${p.charAt(0).toUpperCase() + p.slice(1)}`).classList.toggle("active", p === name);
+        }
 
-        // Nav items active state
-        document.getElementById("navBusqueda").classList.toggle("active", name === "busqueda");
-        document.getElementById("navFuentes").classList.toggle("active",  name === "fuentes");
+        if (name === "fuentes")   loadFuentesList();
+        if (name === "miembros")  loadMembersTable();
 
-        // Cargar fuentes al abrir el panel
-        if (name === "fuentes") loadFuentesList();
-
-        // Cerrar sidebar en mobile al seleccionar
+        // Cerrar sidebar en mobile
         const sidebar = document.getElementById("sidebar");
-        if (!sidebar.classList.contains("lg:static")) {
+        if (sidebar.classList.contains("-translate-x-0") || !sidebar.classList.contains("lg:static")) {
           sidebar.classList.add("-translate-x-full");
           document.getElementById("sidebarOverlay").classList.add("hidden");
         }
@@ -784,33 +806,66 @@
       const JOB_TYPE_LABELS = { remote: "Remoto", hybrid: "Híbrido", "on-site": "Presencial" };
 
       async function loadMembersTable() {
-        const { data, error } = await db.from("search_filters").select("id, telegram_user, tech_stack, job_type, location");
+        const tbody    = document.getElementById("membersTableBody");
+        const empty    = document.getElementById("membersEmpty");
+        const loading  = document.getElementById("membersLoading");
+        const countEl  = document.getElementById("membersCount");
 
-        membersTableBody.innerHTML = "";
+        tbody.innerHTML = "";
+        loading.classList.remove("hidden");
+        empty.classList.add("hidden");
+
+        const { data, error } = await db.from("search_filters")
+          .select("id, telegram_user, tech_stack, job_type, location")
+          .order("telegram_user");
+
+        loading.classList.add("hidden");
 
         if (error || !data?.length) {
-          membersTableBody.innerHTML = `<tr><td colspan="5" class="px-3 py-4 text-center text-gray-500">Sin miembros registrados.</td></tr>`;
-        } else {
-          for (const row of data) {
-            const tr = document.createElement("tr");
-            const modalidadLabel = escapeHtml((row.job_type ?? "").split(",").map(t => JOB_TYPE_LABELS[t] ?? t).join(", "));
-            tr.innerHTML = `
-              <td class="px-3 py-2 font-mono">@${escapeHtml(row.telegram_user)}</td>
-              <td class="px-3 py-2">${escapeHtml(row.tech_stack)}</td>
-              <td class="px-3 py-2">${modalidadLabel}</td>
-              <td class="px-3 py-2">${escapeHtml(row.location)}</td>
-              <td class="px-3 py-2 text-right">
-                <button onclick='openEditModal(${JSON.stringify(row)})'
-                  class="text-indigo-400 hover:text-indigo-300 transition text-xs underline">
-                  Editar
-                </button>
-              </td>
-            `;
-            membersTableBody.appendChild(tr);
-          }
+          empty.classList.remove("hidden");
+          countEl.textContent = "0 miembros";
+          return;
         }
 
-        membersSection.classList.remove("hidden");
+        countEl.textContent = `${data.length} miembro${data.length !== 1 ? "s" : ""}`;
+
+        for (const row of data) {
+          const tr = document.createElement("tr");
+          tr.className = "hover:bg-gray-800/40 transition";
+          const modalidadLabel = escapeHtml((row.job_type ?? "").split(",").map(t => JOB_TYPE_LABELS[t] ?? t).join(", "));
+          const techs = (row.tech_stack ?? "").split(",").map(t => t.trim()).filter(Boolean);
+          const techHtml = techs.map(t =>
+            `<span class="px-1.5 py-0.5 rounded text-[10px] bg-gray-800 border border-gray-700 text-gray-300">${escapeHtml(t)}</span>`
+          ).join(" ");
+
+          tr.innerHTML = `
+            <td class="px-4 py-3 font-mono text-indigo-300 text-sm">@${escapeHtml(row.telegram_user)}</td>
+            <td class="px-4 py-3"><div class="flex flex-wrap gap-1">${techHtml}</div></td>
+            <td class="px-4 py-3 text-xs text-gray-400">${modalidadLabel}</td>
+            <td class="px-4 py-3 text-xs text-gray-400">${escapeHtml(row.location)}</td>
+            <td class="px-4 py-3 text-right">
+              <div class="flex items-center justify-end gap-2">
+                <button onclick='openEditModal(${JSON.stringify(row)})'
+                  class="text-xs text-indigo-400 hover:text-white hover:bg-indigo-600 border border-indigo-700/60
+                         px-2.5 py-1 rounded-md transition">
+                  Editar
+                </button>
+                <button onclick='deleteMember("${escapeHtml(row.id)}", "${escapeHtml(row.telegram_user)}")'
+                  class="text-xs text-gray-500 hover:text-red-400 hover:bg-red-900/30 border border-gray-700
+                         px-2.5 py-1 rounded-md transition">
+                  Eliminar
+                </button>
+              </div>
+            </td>
+          `;
+          tbody.appendChild(tr);
+        }
+      }
+
+      async function deleteMember(id, user) {
+        if (!confirm(`¿Eliminar los criterios de @${user}?`)) return;
+        const { error } = await db.from("search_filters").delete().eq("id", id);
+        if (!error) loadMembersTable();
       }
 
       // ─── Modal de edición ─────────────────────────────────────────────────
