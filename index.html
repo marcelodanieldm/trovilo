@@ -1,1829 +1,1148 @@
 <!DOCTYPE html>
 <html lang="es">
-  <head>
-    <meta charset="UTF-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>Trovilo</title>
-    <script src="https://cdn.tailwindcss.com"></script>
-    <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
-    <style>
-      /* ── Fuente principal ── */
-      @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap');
-      body { font-family: 'Inter', system-ui, sans-serif; }
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>trovilo</title>
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
 
-      /* ── Transición de vistas ── */
-      .view-transition { transition: opacity 0.2s ease; }
+    :root {
+      --bg:       #0c0c0c;
+      --s1:       #141414;
+      --s2:       #1a1a1a;
+      --b1:       #202020;
+      --b2:       #2c2c2c;
+      --t1:       #d4d4d4;
+      --t2:       #737373;
+      --t3:       #383838;
+      --w:        #e8e8e8;
+      --r:        4px;
+    }
 
-      /* ── Sidebar nav ── */
-      .nav-item {
-        color: #71717a;
-        transition: background 0.15s, color 0.15s;
-      }
-      .nav-item:hover { background: rgba(255,255,255,0.05); color: #e4e4e7; }
-      .nav-item.active {
-        background: linear-gradient(135deg, rgba(99,102,241,0.18), rgba(139,92,246,0.10));
-        color: #a5b4fc;
-        box-shadow: inset 2px 0 0 #6366f1;
-      }
+    html, body { height: 100%; }
 
-      /* ── Scrollbars delgadas ── */
-      ::-webkit-scrollbar { width: 4px; height: 4px; }
-      ::-webkit-scrollbar-track { background: transparent; }
-      ::-webkit-scrollbar-thumb { background: #3f3f46; border-radius: 2px; }
-      ::-webkit-scrollbar-thumb:hover { background: #52525b; }
+    body {
+      background: var(--bg);
+      color: var(--t1);
+      font: 13px/1.55 system-ui, -apple-system, 'Segoe UI', sans-serif;
+      -webkit-font-smoothing: antialiased;
+    }
 
-      /* ── Skeleton loader ── */
-      @keyframes shimmer {
-        0%   { background-position: -600px 0; }
-        100% { background-position:  600px 0; }
-      }
-      .skeleton {
-        background: linear-gradient(90deg, #27272a 25%, #3f3f46 50%, #27272a 75%);
-        background-size: 600px 100%;
-        animation: shimmer 1.4s infinite linear;
-        border-radius: 6px;
-      }
+    ::-webkit-scrollbar { width: 3px; height: 3px; }
+    ::-webkit-scrollbar-track { background: transparent; }
+    ::-webkit-scrollbar-thumb { background: var(--b2); border-radius: 2px; }
 
-      /* ── Job card hover ── */
-      .job-card { transition: background 0.12s; }
-      .job-card:hover { background: rgba(39,39,42,0.9); }
-      .job-card:hover .job-title { color: #a5b4fc; }
+    #app { display: flex; flex-direction: column; height: 100vh; overflow: hidden; }
 
-      /* ── Input focus ring consistente ── */
-      .field {
-        width: 100%;
-        border-radius: 0.5rem;
-        background: #18181b;
-        border: 1px solid #3f3f46;
-        color: #f4f4f5;
-        padding: 0.625rem 1rem;
-        font-size: 0.875rem;
-        outline: none;
-        transition: border-color 0.15s, box-shadow 0.15s;
-      }
-      .field:focus { border-color: #6366f1; box-shadow: 0 0 0 3px rgba(99,102,241,0.15); }
-      .field::placeholder { color: #52525b; }
+    /* ── Topbar ── */
+    .topbar {
+      height: 44px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 0 16px;
+      border-bottom: 1px solid var(--b1);
+      flex-shrink: 0;
+    }
+    .topbar-logo { font-size: 13px; font-weight: 600; color: var(--w); letter-spacing: -.01em; }
 
-      /* ── Botón primario ── */
-      .btn-primary {
-        background: linear-gradient(135deg, #6366f1, #818cf8);
-        color: #fff;
-        font-weight: 600;
-        font-size: 0.875rem;
-        border-radius: 0.5rem;
-        padding: 0.625rem 1.25rem;
-        transition: filter 0.15s, opacity 0.15s;
-        border: none;
-        cursor: pointer;
-      }
-      .btn-primary:hover { filter: brightness(1.1); }
-      .btn-primary:active { filter: brightness(0.95); }
-      .btn-primary:disabled { opacity: 0.45; cursor: not-allowed; }
+    /* ── Layout ── */
+    .body { display: flex; flex: 1; overflow: hidden; }
 
-      /* ── Botón ghost ── */
-      .btn-ghost {
-        color: #a1a1aa;
-        font-size: 0.75rem;
-        border: 1px solid #3f3f46;
-        border-radius: 0.375rem;
-        padding: 0.375rem 0.75rem;
-        background: transparent;
-        transition: background 0.15s, color 0.15s, border-color 0.15s;
-        cursor: pointer;
-      }
-      .btn-ghost:hover { background: #27272a; color: #e4e4e7; border-color: #52525b; }
+    .sidebar {
+      width: 156px;
+      flex-shrink: 0;
+      border-right: 1px solid var(--b1);
+      padding: 12px 6px;
+      display: flex;
+      flex-direction: column;
+      overflow-y: auto;
+    }
+    .nav-section { font-size: 10px; text-transform: uppercase; letter-spacing: .07em; color: var(--t3); padding: 0 8px; margin-bottom: 4px; font-weight: 500; }
+    .nav-btn {
+      display: block; width: 100%; text-align: left;
+      padding: 6px 8px; border-radius: var(--r);
+      font-size: 12.5px; color: var(--t2);
+      background: none; border: none; cursor: pointer;
+      transition: color .1s, background .1s;
+    }
+    .nav-btn:hover { color: var(--t1); background: rgba(255,255,255,.04); }
+    .nav-btn.active { color: var(--w); background: rgba(255,255,255,.06); }
+    .sidebar-footer { margin-top: auto; padding: 12px 8px 0; border-top: 1px solid var(--b1); }
+    .sidebar-footer p { font-size: 10px; color: var(--t3); }
 
-      /* ── Pill de filtro (modo) ── */
-      .mode-pill {
-        padding: 0.25rem 0.625rem;
-        border-radius: 0.375rem;
-        font-size: 0.6875rem;
-        font-weight: 500;
-        border: 1px solid #27272a;
-        color: #71717a;
-        background: transparent;
-        cursor: pointer;
-        transition: all 0.12s;
-      }
-      .mode-pill:hover { border-color: #52525b; color: #d4d4d8; }
-      .mode-pill.active { background: #3f3f46; color: #e4e4e7; border-color: #52525b; }
+    /* ── Content ── */
+    .content { flex: 1; overflow: hidden; display: flex; flex-direction: column; }
+    .scroll-panels { flex: 1; overflow-y: auto; }
 
-      /* ── Toggle exclusivas ── */
-      .toggle-track {
-        display: inline-flex; align-items: center;
-        width: 2rem; height: 1.125rem;
-        border-radius: 9999px;
-        border: 1px solid #3f3f46;
-        background: #27272a;
-        position: relative;
-        transition: background 0.2s, border-color 0.2s;
-      }
-      .toggle-track.on { background: #6366f1; border-color: #6366f1; }
-      .toggle-thumb {
-        position: absolute;
-        left: 3px;
-        width: 0.75rem; height: 0.75rem;
-        border-radius: 9999px;
-        background: #71717a;
-        transition: transform 0.2s, background 0.2s;
-      }
-      .toggle-track.on .toggle-thumb { transform: translateX(0.875rem); background: #fff; }
+    /* ── Panels ── */
+    .panel      { max-width: 520px; margin: 0 auto; padding: 36px 20px; }
+    .panel-wide { max-width: 860px; margin: 0 auto; padding: 36px 20px; }
 
-      /* ── Card base ── */
-      .card {
-        background: #18181b;
-        border: 1px solid #27272a;
-        border-radius: 1rem;
-        box-shadow: 0 4px 24px rgba(0,0,0,0.4);
-      }
+    .page-header { margin-bottom: 24px; }
+    .page-title { font-size: 14px; font-weight: 600; color: var(--w); }
+    .page-sub { font-size: 11.5px; color: var(--t3); margin-top: 3px; }
 
-      /* ── Badge base ── */
-      .badge {
-        display: inline-flex; align-items: center;
-        padding: 0.125rem 0.5rem;
-        border-radius: 0.25rem;
-        font-size: 0.625rem;
-        font-weight: 600;
-        border: 1px solid;
-        letter-spacing: 0.02em;
-        line-height: 1.4;
-      }
+    /* ── Cards ── */
+    .card { border: 1px solid var(--b1); border-radius: var(--r); background: var(--s1); }
+    .card-body { padding: 20px; }
+    .card-header {
+      padding: 12px 16px;
+      display: flex; align-items: center; justify-content: space-between;
+      border-bottom: 1px solid var(--b1);
+    }
+    .card-title { font-size: 12.5px; font-weight: 500; color: var(--t1); }
 
-      /* ── Fade de borde superior en lista de jobs ── */
-      #jobResultsContainer { position: relative; }
+    /* ── Form ── */
+    .field-group { margin-bottom: 18px; }
+    .field-label {
+      display: block; font-size: 10.5px; font-weight: 500;
+      text-transform: uppercase; letter-spacing: .06em;
+      color: var(--t2); margin-bottom: 6px;
+    }
+    input[type=text], input[type=email], input[type=password],
+    input[type=search], textarea, select {
+      width: 100%; background: var(--bg); border: 1px solid var(--b2);
+      border-radius: var(--r); color: var(--t1);
+      font: 13px/1.4 system-ui, -apple-system, sans-serif;
+      padding: 7px 10px; outline: none; transition: border-color .12s;
+    }
+    input:focus, textarea:focus, select:focus { border-color: var(--b2); box-shadow: 0 0 0 2px rgba(255,255,255,.05); }
+    input::placeholder, textarea::placeholder { color: var(--t3); }
+    textarea { resize: vertical; }
 
-      /* ── Animación de entrada de panel ── */
-      .panel-enter { animation: panelIn 0.18s ease both; }
-      @keyframes panelIn {
-        from { opacity: 0; transform: translateY(6px); }
-        to   { opacity: 1; transform: translateY(0); }
-      }
-    </style>
-  </head>
+    .input-with-prefix { position: relative; }
+    .input-prefix-char {
+      position: absolute; left: 10px; top: 50%; transform: translateY(-50%);
+      color: var(--t3); pointer-events: none; font-size: 13px;
+    }
+    .input-with-prefix input { padding-left: 20px; }
 
-  <body class="min-h-screen bg-zinc-950 text-zinc-100 antialiased">
+    .hint { font-size: 11px; color: var(--t3); margin-top: 5px; }
+    .err  { font-size: 11px; color: #f87171; margin-top: 5px; }
 
-    <!-- ═══════════════════════════════════════════════════
-         VISTA: LOGIN
-    ════════════════════════════════════════════════════ -->
-    <div id="loginView" class="min-h-screen flex items-center justify-center px-4">
+    .check-row { display: flex; gap: 18px; flex-wrap: wrap; }
+    .check-item {
+      display: flex; align-items: center; gap: 6px;
+      font-size: 12.5px; color: var(--t2); cursor: pointer; user-select: none;
+    }
+    .check-item input[type=checkbox] { width: auto; padding: 0; accent-color: var(--w); }
 
-      <div class="w-full max-w-sm">
-        <!-- Logo -->
-        <div class="mb-8 text-center">
-          <div class="inline-flex items-center justify-center w-12 h-12 rounded-2xl mb-4"
-               style="background: linear-gradient(135deg,#6366f1,#8b5cf6);">
-            <svg class="w-6 h-6 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
-              <path stroke-linecap="round" stroke-linejoin="round" d="M21 21l-4.35-4.35M17 11A6 6 0 1 1 5 11a6 6 0 0 1 12 0z"/>
-            </svg>
+    .pills { display: flex; flex-wrap: wrap; gap: 5px; margin-top: 8px; }
+    .pill {
+      padding: 3px 10px; border-radius: 100px; font-size: 11px;
+      border: 1px solid var(--b2); color: var(--t2);
+      background: none; cursor: pointer; transition: all .1s;
+    }
+    .pill:hover { border-color: var(--b2); color: var(--t1); }
+    .pill.active { border-color: var(--w); color: var(--w); background: rgba(255,255,255,.05); }
+
+    /* ── Buttons ── */
+    .btn {
+      display: inline-flex; align-items: center; justify-content: center; gap: 5px;
+      padding: 7px 13px; border-radius: var(--r);
+      font: 500 12.5px/1 system-ui, sans-serif;
+      cursor: pointer; border: none; transition: all .12s;
+    }
+    .btn:disabled { opacity: .38; cursor: not-allowed; }
+    .btn-full { width: 100%; }
+    .btn-sm   { padding: 4px 10px; font-size: 12px; }
+
+    .btn-primary { background: var(--w); color: #000; }
+    .btn-primary:hover:not(:disabled) { background: #f0f0f0; }
+
+    .btn-ghost { background: transparent; border: 1px solid var(--b2); color: var(--t2); }
+    .btn-ghost:hover:not(:disabled) { border-color: var(--b2); color: var(--t1); background: rgba(255,255,255,.03); }
+
+    .btn-muted { background: transparent; border: 1px solid transparent; color: var(--t3); }
+    .btn-muted:hover:not(:disabled) { color: #f87171; border-color: rgba(248,113,113,.2); }
+
+    /* ── Alert ── */
+    .alert { padding: 9px 12px; border-radius: var(--r); font-size: 12px; border: 1px solid; margin-top: 14px; }
+    .alert-err  { border-color: rgba(248,113,113,.2); color: #f87171;  background: rgba(248,113,113,.05); }
+    .alert-ok   { border-color: rgba(74,222,128,.2);  color: #4ade80;  background: rgba(74,222,128,.05); }
+
+    /* ── Badge ── */
+    .badge {
+      display: inline-flex; align-items: center;
+      padding: 1px 5px; border-radius: 3px;
+      font-size: 10px; font-weight: 500; border: 1px solid;
+    }
+    .b-green  { color: #4ade80; border-color: rgba(74,222,128,.2);  background: rgba(74,222,128,.06); }
+    .b-blue   { color: #60a5fa; border-color: rgba(96,165,250,.2);  background: rgba(96,165,250,.06); }
+    .b-orange { color: #fb923c; border-color: rgba(251,146,60,.2);  background: rgba(251,146,60,.06); }
+    .b-yellow { color: #facc15; border-color: rgba(250,204,21,.2);  background: rgba(250,204,21,.06); }
+    .b-red    { color: #f87171; border-color: rgba(248,113,113,.2); background: rgba(248,113,113,.06); }
+    .b-violet { color: #a78bfa; border-color: rgba(167,139,250,.2); background: rgba(167,139,250,.06); }
+    .b-muted  { color: var(--t3); border-color: var(--b1); }
+
+    /* ── Tag ── */
+    .tag {
+      display: inline-flex; padding: 2px 8px; border-radius: 100px;
+      font-size: 11px; border: 1px solid var(--b2); color: var(--t2);
+      cursor: pointer; transition: all .1s;
+    }
+    .tag:hover { color: var(--t1); border-color: var(--b2); background: rgba(255,255,255,.03); }
+
+    /* ── Skeleton ── */
+    @keyframes sh { 0% { background-position: -300px 0; } 100% { background-position: 300px 0; } }
+    .sk {
+      background: linear-gradient(90deg, var(--s1) 25%, var(--s2) 50%, var(--s1) 75%);
+      background-size: 300px 100%; animation: sh 1.3s infinite linear; border-radius: 3px;
+    }
+
+    /* ── Table ── */
+    table { width: 100%; border-collapse: collapse; }
+    thead th {
+      text-align: left; padding: 8px 12px;
+      font-size: 10px; font-weight: 500; text-transform: uppercase; letter-spacing: .07em;
+      color: var(--t3); border-bottom: 1px solid var(--b1);
+    }
+    tbody tr { border-bottom: 1px solid var(--b1); transition: background .1s; }
+    tbody tr:last-child { border-bottom: none; }
+    tbody tr:hover { background: rgba(255,255,255,.025); }
+    td { padding: 9px 12px; font-size: 12.5px; vertical-align: middle; }
+
+    /* ── Job card ── */
+    .job-card {
+      display: flex; align-items: flex-start; gap: 11px;
+      padding: 11px 16px; border-bottom: 1px solid var(--b1);
+      text-decoration: none; color: inherit; transition: background .1s;
+    }
+    .job-card:hover { background: rgba(255,255,255,.025); }
+    .job-card:last-child { border-bottom: none; }
+    .job-ico {
+      width: 30px; height: 30px; flex-shrink: 0;
+      border: 1px solid var(--b1); border-radius: 5px;
+      background: var(--s2);
+      display: flex; align-items: center; justify-content: center;
+      font-size: 11px; font-weight: 600; color: var(--t3); user-select: none;
+      overflow: hidden;
+    }
+    .job-ico img { width: 100%; height: 100%; object-fit: contain; }
+    .job-body  { flex: 1; min-width: 0; }
+    .job-title {
+      font-size: 13px; font-weight: 500; color: var(--t1);
+      overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+      transition: color .1s;
+    }
+    .job-card:hover .job-title { color: var(--w); }
+    .job-meta  { display: flex; align-items: center; gap: 6px; margin-top: 3px; flex-wrap: wrap; }
+    .job-co    { font-size: 11.5px; color: var(--t2); }
+    .job-time  { font-size: 11px; color: var(--t3); white-space: nowrap; flex-shrink: 0; margin-top: 1px; }
+    .job-time.hot { color: #fb923c; }
+
+    /* ── Filter bar ── */
+    .fbar { border-bottom: 1px solid var(--b1); padding: 9px 14px; flex-shrink: 0; }
+    .frow { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; }
+    .frow + .frow { margin-top: 7px; }
+    .fi {
+      background: var(--bg); border: 1px solid var(--b1);
+      border-radius: var(--r); color: var(--t1);
+      font: 12px system-ui, sans-serif; padding: 5px 8px; outline: none;
+      transition: border-color .12s;
+    }
+    .fi:focus { border-color: var(--b2); }
+    .fi::placeholder { color: var(--t3); }
+    .fi-flex { flex: 1; min-width: 130px; }
+    .fpill {
+      padding: 4px 9px; border-radius: var(--r); font-size: 11.5px;
+      border: 1px solid var(--b1); color: var(--t2); background: none;
+      cursor: pointer; transition: all .1s; font-family: system-ui, sans-serif;
+    }
+    .fpill:hover { color: var(--t1); border-color: var(--b2); }
+    .fpill.on { color: var(--w); border-color: var(--b2); background: rgba(255,255,255,.05); }
+
+    .toggle-wrap { display: inline-flex; align-items: center; gap: 6px; cursor: pointer; user-select: none; }
+    .toggle-wrap:hover .toggle-label { color: var(--t1); }
+    .toggle-label { font-size: 11.5px; color: var(--t2); transition: color .1s; }
+    .toggle-track {
+      width: 26px; height: 14px; border-radius: 7px;
+      background: var(--b2); border: 1px solid var(--b2);
+      position: relative; transition: background .15s;
+    }
+    .toggle-track.on { background: var(--w); border-color: var(--w); }
+    .toggle-thumb {
+      position: absolute; top: 2px; left: 2px;
+      width: 8px; height: 8px; border-radius: 50%;
+      background: var(--t2); transition: transform .15s, background .15s;
+    }
+    .toggle-track.on .toggle-thumb { transform: translateX(12px); background: #000; }
+
+    .sep { width: 1px; height: 12px; background: var(--b1); }
+    .stat { font-size: 11px; color: var(--t3); }
+
+    /* ── Fuente item ── */
+    .fuente-row {
+      display: flex; align-items: center; justify-content: space-between;
+      padding: 6px 10px; border-radius: 3px; transition: background .1s;
+    }
+    .fuente-row:hover { background: rgba(255,255,255,.03); }
+    .fuente-dot { width: 4px; height: 4px; border-radius: 50%; background: var(--t3); flex-shrink: 0; }
+    .fuente-name { font-size: 12px; color: var(--t2); font-family: 'Menlo','Consolas',monospace; margin-left: 8px; }
+    .fuente-del { opacity: 0; color: var(--t3); background: none; border: none; cursor: pointer; font-size: 11px; transition: all .1s; padding: 2px 4px; border-radius: 3px; }
+    .fuente-row:hover .fuente-del { opacity: 1; }
+    .fuente-del:hover { color: #f87171; }
+
+    /* ── Count chip ── */
+    .chip { font-size: 10px; color: var(--t3); border: 1px solid var(--b1); padding: 1px 7px; border-radius: 100px; }
+
+    /* ── Collapsible ── */
+    .coll-hdr {
+      display: flex; align-items: center; justify-content: space-between;
+      padding: 11px 16px; cursor: pointer; font-size: 12.5px; color: var(--t2);
+      transition: color .1s; user-select: none;
+    }
+    .coll-hdr:hover { color: var(--t1); }
+    .coll-body { padding: 0 16px 16px; border-top: 1px solid var(--b1); }
+
+    /* ── Login ── */
+    .login-wrap { flex: 1; display: flex; align-items: center; justify-content: center; padding: 24px; }
+    .login-box  { width: 100%; max-width: 300px; }
+    .login-brand { text-align: center; margin-bottom: 28px; }
+    .login-brand h1 { font-size: 18px; font-weight: 600; color: var(--w); letter-spacing: -.02em; }
+    .login-brand p  { font-size: 12px; color: var(--t3); margin-top: 4px; }
+
+    /* ── Modal ── */
+    .modal-bg {
+      position: fixed; inset: 0; background: rgba(0,0,0,.7);
+      display: flex; align-items: center; justify-content: center;
+      padding: 20px; z-index: 100;
+    }
+    .modal-box { width: 100%; max-width: 340px; }
+
+    /* ── Empty ── */
+    .empty { padding: 56px 24px; text-align: center; color: var(--t3); font-size: 12.5px; }
+
+    /* ── Tech cloud card ── */
+    .cloud-card { background: var(--s1); border: 1px solid var(--b1); border-radius: var(--r); padding: 12px; margin-top: 10px; }
+    .cloud-label { font-size: 10.5px; color: var(--t3); margin-bottom: 8px; }
+
+    /* ── Mobile ── */
+    @media (max-width: 640px) {
+      .sidebar { display: none; }
+      .panel, .panel-wide { padding: 24px 14px; }
+    }
+  </style>
+</head>
+<body>
+<div id="app">
+
+  <!-- ── LOGIN ─────────────────────────────────── -->
+  <div v-if="!session" class="login-wrap">
+    <div class="login-box">
+      <div class="login-brand">
+        <h1>trovilo</h1>
+        <p>Iniciá sesión para continuar</p>
+      </div>
+      <div class="card card-body">
+        <form @submit.prevent="login">
+          <div class="field-group">
+            <label class="field-label">Email</label>
+            <input type="email" v-model="loginEmail" placeholder="tu@email.com" autocomplete="email" required>
           </div>
-          <h1 class="text-2xl font-bold text-white tracking-tight">trovilo</h1>
-          <p class="mt-1.5 text-sm text-zinc-500">Iniciá sesión para continuar</p>
+          <div class="field-group">
+            <label class="field-label">Contraseña</label>
+            <input type="password" v-model="loginPassword" placeholder="••••••••" autocomplete="current-password" required>
+          </div>
+          <button type="submit" class="btn btn-primary btn-full" :disabled="loginLoading">
+            {{ loginLoading ? 'Verificando…' : 'Iniciar sesión' }}
+          </button>
+          <div v-if="loginError" class="alert alert-err">{{ loginError }}</div>
+        </form>
+      </div>
+    </div>
+  </div>
+
+  <!-- ── DASHBOARD ──────────────────────────────── -->
+  <template v-else>
+
+    <!-- Topbar -->
+    <div class="topbar">
+      <span class="topbar-logo">trovilo</span>
+      <button class="btn btn-ghost btn-sm" @click="logout" :disabled="logoutLoading">
+        {{ logoutLoading ? 'Saliendo…' : 'Cerrar sesión' }}
+      </button>
+    </div>
+
+    <!-- Body -->
+    <div class="body">
+
+      <!-- Sidebar -->
+      <aside class="sidebar">
+        <div class="nav-section" style="margin-top:4px">Menú</div>
+        <button class="nav-btn" :class="{active: panel==='busqueda'}"  @click="go('busqueda')">Búsqueda</button>
+        <button class="nav-btn" :class="{active: panel==='buscador'}"  @click="go('buscador')">Empleos</button>
+        <button class="nav-btn" :class="{active: panel==='fuentes'}"   @click="go('fuentes')">Fuentes</button>
+        <button class="nav-btn" :class="{active: panel==='miembros'}"  @click="go('miembros')">Miembros</button>
+        <div class="sidebar-footer"><p>© 2025</p></div>
+      </aside>
+
+      <!-- Content -->
+      <div class="content">
+
+        <!-- Scrollable panels -->
+        <div class="scroll-panels" v-show="panel !== 'buscador'">
+
+          <!-- ══ BÚSQUEDA ══ -->
+          <div class="panel" v-show="panel === 'busqueda'">
+            <div class="page-header">
+              <div class="page-title">Configurar búsqueda</div>
+              <div class="page-sub">Criterios para el scraper de Telegram</div>
+            </div>
+            <div class="card card-body">
+              <form @submit.prevent="submitForm">
+
+                <div class="field-group">
+                  <label class="field-label">Tecnologías</label>
+                  <input type="text" v-model="form.tech_stack" placeholder="Python, FastAPI, PostgreSQL…" required>
+                  <div class="hint">Separadas por comas</div>
+
+                  <!-- Cloud de tags -->
+                  <div class="cloud-card" v-if="techCloud.length">
+                    <div class="cloud-label">Buscadas por otros miembros · clic para agregar</div>
+                    <div class="pills">
+                      <button v-for="t in techCloud" :key="t" type="button" class="tag" @click="addTechTag(t)">{{ t }}</button>
+                    </div>
+                    <div style="display:flex;gap:6px;margin-top:10px">
+                      <input type="text" v-model="newTag" placeholder="Agregar tag…" @keydown.enter.prevent="addNewTag" style="flex:1;font-size:12px;padding:5px 8px">
+                      <button type="button" class="btn btn-ghost btn-sm" @click="addNewTag">+</button>
+                    </div>
+                  </div>
+                </div>
+
+                <div class="field-group">
+                  <label class="field-label">Modalidad</label>
+                  <div class="check-row">
+                    <label class="check-item"><input type="checkbox" v-model="form.job_type" value="remote"> Remoto</label>
+                    <label class="check-item"><input type="checkbox" v-model="form.job_type" value="hybrid"> Híbrido</label>
+                    <label class="check-item"><input type="checkbox" v-model="form.job_type" value="on-site"> Presencial</label>
+                  </div>
+                  <div class="err" v-if="formSubmitted && !form.job_type.length">Seleccioná al menos una modalidad.</div>
+                </div>
+
+                <div class="field-group">
+                  <label class="field-label">Ubicación</label>
+                  <input type="text" v-model="form.location" placeholder="Argentina, Buenos Aires…" required>
+                  <div class="pills">
+                    <button v-for="loc in ['Argentina','Uruguay','Latin America','Latam']" :key="loc"
+                      type="button" class="pill" :class="{active: form.location === loc}"
+                      @click="form.location = loc">{{ loc }}</button>
+                  </div>
+                </div>
+
+                <div class="field-group">
+                  <label class="field-label">Usuario de Telegram</label>
+                  <div class="input-with-prefix">
+                    <span class="input-prefix-char">@</span>
+                    <input type="text" v-model="form.telegram_user" placeholder="tuusuario" required>
+                  </div>
+                  <div class="hint">Sin el símbolo @</div>
+                </div>
+
+                <button type="submit" class="btn btn-primary btn-full" :disabled="formLoading">
+                  {{ formLoading ? 'Guardando…' : 'Guardar criterios' }}
+                </button>
+              </form>
+              <div v-if="formError"   class="alert alert-err">{{ formError }}</div>
+              <div v-if="formSuccess" class="alert alert-ok">
+                {{ formSuccess }}
+                <a :href="TELEGRAM_LINK" target="_blank" rel="noopener"
+                   style="display:block;margin-top:4px;font-size:11px;color:inherit;opacity:.7;text-decoration:underline">
+                  Ver canal de Telegram →
+                </a>
+              </div>
+            </div>
+          </div>
+
+          <!-- ══ FUENTES ══ -->
+          <div class="panel-wide" v-show="panel === 'fuentes'">
+            <div class="page-header">
+              <div class="page-title">Fuentes de scraping</div>
+              <div class="page-sub">Dominios visitados en cada ejecución</div>
+            </div>
+
+            <div style="display:grid;grid-template-columns:1fr 1fr;gap:14px;align-items:start" class="fuentes-grid">
+
+              <!-- Lista -->
+              <div class="card">
+                <div class="card-header">
+                  <span class="card-title">Fuentes activas</span>
+                  <span class="chip">{{ fuentes.length }}</span>
+                </div>
+                <div style="padding:10px 10px 4px">
+                  <input type="search" v-model="fuentesSearch" placeholder="Filtrar…" class="fi" style="width:100%;font-size:12px;padding:5px 8px">
+                </div>
+                <div style="max-height:360px;overflow-y:auto;padding:4px 10px 10px">
+                  <template v-if="fuentesLoading">
+                    <div v-for="i in 5" :key="i" style="display:flex;align-items:center;gap:8px;padding:7px 2px">
+                      <div class="sk" style="width:6px;height:6px;border-radius:50%"></div>
+                      <div class="sk" :style="{height:'12px', width: (50+i*8)+'%'}"></div>
+                    </div>
+                  </template>
+                  <template v-else-if="filteredFuentes.length">
+                    <div v-for="f in filteredFuentes" :key="f.id" class="fuente-row">
+                      <div style="display:flex;align-items:center">
+                        <div class="fuente-dot"></div>
+                        <span class="fuente-name">{{ f.domain }}</span>
+                      </div>
+                      <button class="fuente-del" @click="deleteFuente(f.id, f.domain)">✕</button>
+                    </div>
+                  </template>
+                  <div v-else class="empty" style="padding:30px">Sin fuentes</div>
+                </div>
+              </div>
+
+              <!-- Agregar -->
+              <div class="card">
+                <div class="coll-hdr" @click="fuentesOpen = !fuentesOpen">
+                  <span>Agregar fuentes</span>
+                  <span style="font-size:11px;color:var(--t3)">{{ fuentesOpen ? '▲' : '▼' }}</span>
+                </div>
+                <div class="coll-body" v-show="fuentesOpen" style="padding-top:14px">
+                  <div class="field-group">
+                    <label class="field-label">CSV / Excel</label>
+                    <input type="file" accept=".csv,.xlsx,.xls" @change="handleFile"
+                      style="font-size:12px;color:var(--t2);cursor:pointer;width:100%">
+                  </div>
+                  <div class="field-group">
+                    <label class="field-label">URLs (una por línea)</label>
+                    <textarea v-model="manualUrls" rows="4" placeholder="https://jobs.example.com"></textarea>
+                  </div>
+                  <button class="btn btn-ghost btn-sm" style="width:100%" @click="processUrls">Extraer dominios</button>
+
+                  <template v-if="parsedDomains.length">
+                    <div style="margin-top:14px">
+                      <div style="font-size:11px;color:var(--t3);margin-bottom:8px">{{ parsedDomains.length }} dominios extraídos</div>
+                      <div class="pills">
+                        <span v-for="d in parsedDomains" :key="d" class="tag" style="cursor:default;font-family:monospace">{{ d }}</span>
+                      </div>
+                      <button class="btn btn-ghost btn-sm" style="margin-top:10px" @click="validateDomains">Validar contra el sistema</button>
+                    </div>
+                  </template>
+
+                  <template v-if="validationDone">
+                    <div style="margin-top:14px">
+                      <div v-if="alreadyDomains.length" style="margin-bottom:10px">
+                        <div style="font-size:11px;color:var(--t3);margin-bottom:6px">✓ Ya en el sistema ({{ alreadyDomains.length }})</div>
+                        <div class="pills">
+                          <span v-for="d in alreadyDomains" :key="d" class="badge b-green">{{ d }}</span>
+                        </div>
+                      </div>
+                      <div v-if="newDomains.length">
+                        <div style="font-size:11px;color:var(--t3);margin-bottom:8px">+ Nuevos ({{ newDomains.length }})</div>
+                        <div style="border:1px solid var(--b1);border-radius:var(--r);overflow:hidden">
+                          <label v-for="d in newDomains" :key="d"
+                            style="display:flex;align-items:center;gap:8px;padding:6px 10px;border-bottom:1px solid var(--b1);cursor:pointer;font-size:12px;color:var(--t2)"
+                            :style="{'border-bottom': d === newDomains[newDomains.length-1] ? 'none' : ''}">
+                            <input type="checkbox" :value="d" v-model="selectedDomains" style="width:auto;padding:0;accent-color:var(--w)">
+                            <span style="font-family:monospace">{{ d }}</span>
+                          </label>
+                        </div>
+                        <button class="btn btn-primary btn-sm" style="margin-top:10px;width:100%"
+                          :disabled="!selectedDomains.length || savingDomains" @click="saveDomains">
+                          {{ savingDomains ? 'Guardando…' : 'Agregar seleccionadas' }}
+                        </button>
+                        <div v-if="saveDomainsErr" class="alert alert-err">{{ saveDomainsErr }}</div>
+                      </div>
+                      <div v-if="!newDomains.length && !alreadyDomains.length" class="empty" style="padding:20px">Sin dominios nuevos</div>
+                    </div>
+                  </template>
+                  <div v-if="saveDomainsOk" class="alert alert-ok" style="margin-top:12px">Fuentes agregadas correctamente.</div>
+                </div>
+              </div>
+
+            </div>
+          </div>
+
+          <!-- ══ MIEMBROS ══ -->
+          <div class="panel-wide" v-show="panel === 'miembros'">
+            <div class="page-header" style="display:flex;align-items:flex-start;justify-content:space-between">
+              <div>
+                <div class="page-title">Miembros</div>
+                <div class="page-sub">Criterios registrados por usuario</div>
+              </div>
+              <span class="chip">{{ members.length }}</span>
+            </div>
+            <div class="card" style="overflow:hidden">
+              <div style="overflow-x:auto">
+                <table>
+                  <thead>
+                    <tr>
+                      <th>Usuario</th>
+                      <th>Tecnologías</th>
+                      <th>Modalidad</th>
+                      <th>Ubicación</th>
+                      <th style="text-align:right">Acciones</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    <template v-if="membersLoading">
+                      <tr v-for="i in 4" :key="i">
+                        <td><div class="sk" style="height:12px;width:80px"></div></td>
+                        <td><div class="sk" style="height:12px;width:120px"></div></td>
+                        <td><div class="sk" style="height:12px;width:60px"></div></td>
+                        <td><div class="sk" style="height:12px;width:80px"></div></td>
+                        <td></td>
+                      </tr>
+                    </template>
+                    <template v-else-if="members.length">
+                      <tr v-for="m in members" :key="m.id">
+                        <td style="font-family:monospace;color:var(--t1)">@{{ m.telegram_user }}</td>
+                        <td>
+                          <div style="display:flex;flex-wrap:wrap;gap:4px">
+                            <span v-for="t in techsOf(m)" :key="t"
+                              style="font-size:10.5px;padding:1px 6px;border:1px solid var(--b1);border-radius:3px;color:var(--t2)">{{ t }}</span>
+                          </div>
+                        </td>
+                        <td style="color:var(--t2)">{{ jobTypeLabel(m.job_type) }}</td>
+                        <td style="color:var(--t2)">{{ m.location }}</td>
+                        <td style="text-align:right">
+                          <button class="btn btn-ghost btn-sm" @click="openEdit(m)" style="margin-right:4px">Editar</button>
+                          <button class="btn btn-muted btn-sm" @click="deleteMember(m.id, m.telegram_user)">Eliminar</button>
+                        </td>
+                      </tr>
+                    </template>
+                    <tr v-else>
+                      <td colspan="5" class="empty">Sin miembros registrados</td>
+                    </tr>
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          </div>
+
+        </div><!-- /scroll-panels -->
+
+        <!-- ══ BUSCADOR (full height) ══ -->
+        <div v-show="panel === 'buscador'" style="flex:1;display:flex;flex-direction:column;overflow:hidden">
+
+          <!-- Filter bar -->
+          <div class="fbar">
+            <div class="frow">
+              <input type="search" v-model="jobSearch" placeholder="Título, empresa…" class="fi fi-flex">
+              <select v-model="jobLocation" class="fi">
+                <option value="">Ubicación</option>
+                <option value="remote">Remote</option>
+                <option value="argentina">Argentina</option>
+                <option value="latam">LATAM</option>
+                <option value="uruguay">Uruguay</option>
+                <option value="colombia">Colombia</option>
+                <option value="mexico">México</option>
+                <option value="brasil">Brasil</option>
+                <option value="united states">USA</option>
+              </select>
+              <select v-model="jobSeniority" class="fi">
+                <option value="">Experiencia</option>
+                <option value="junior">Junior</option>
+                <option value="mid">Mid</option>
+                <option value="senior">Senior</option>
+                <option value="lead">Lead</option>
+              </select>
+              <select v-model="jobTime" class="fi">
+                <option :value="0">Fecha</option>
+                <option :value="24">24 h</option>
+                <option :value="48">48 h</option>
+                <option :value="72">72 h</option>
+                <option :value="168">Esta semana</option>
+              </select>
+            </div>
+            <div class="frow">
+              <button v-for="m in [{v:'all',l:'Todos'},{v:'remote',l:'Remote'},{v:'hybrid',l:'Híbrido'}]" :key="m.v"
+                class="fpill" :class="{on: jobMode === m.v}" @click="jobMode = m.v">{{ m.l }}</button>
+              <div class="sep"></div>
+              <div class="toggle-wrap" @click="soloExclusivas = !soloExclusivas">
+                <div class="toggle-track" :class="{on: soloExclusivas}">
+                  <div class="toggle-thumb"></div>
+                </div>
+                <span class="toggle-label">Solo exclusivas</span>
+              </div>
+              <div class="sep"></div>
+              <select v-model="communitySource" class="fi" style="font-size:11.5px;padding:4px 7px">
+                <option value="all">Todas las fuentes</option>
+                <option value="rocketship">Remote Rocketship</option>
+                <option value="remoteok">RemoteOK</option>
+                <option value="remotive">Remotive</option>
+                <option value="wwr">We Work Remotely</option>
+                <option value="arbeitnow">Arbeitnow</option>
+                <option value="cryptojobslist">CryptoJobsList</option>
+              </select>
+              <button class="fpill" :class="{on: scrapingCommunity}" @click="scrapeCommunity" :disabled="scrapingCommunity">
+                {{ scrapingCommunity ? 'Scrapeando…' : 'Scrapear' }}
+              </button>
+              <span v-if="communityStatus" :style="{fontSize:'11px',color: communityStatusType==='error'?'#f87171': communityStatusType==='ok'?'#4ade80':'var(--t3)'}">{{ communityStatus }}</span>
+              <div style="margin-left:auto;display:flex;align-items:center;gap:8px">
+                <span class="stat" v-if="jobs.length">{{ filteredJobs.length }} / {{ jobs.length }}</span>
+                <span v-if="newJobsCount" style="font-size:11px;color:#4ade80">+{{ newJobsCount }} esta semana</span>
+              </div>
+            </div>
+          </div>
+
+          <!-- Job list -->
+          <div style="flex:1;overflow-y:auto">
+            <!-- Skeleton -->
+            <template v-if="jobsLoading">
+              <div v-for="i in 8" :key="i" style="display:flex;align-items:center;gap:11px;padding:11px 16px;border-bottom:1px solid var(--b1)">
+                <div class="sk" style="width:30px;height:30px;border-radius:5px;flex-shrink:0"></div>
+                <div style="flex:1">
+                  <div class="sk" :style="{height:'13px',width:(40+i*5)+'%',marginBottom:'6px'}"></div>
+                  <div class="sk" :style="{height:'11px',width:(20+i*3)+'%'}"></div>
+                </div>
+                <div class="sk" style="height:11px;width:28px"></div>
+              </div>
+            </template>
+            <template v-else-if="filteredJobs.length">
+              <a v-for="job in filteredJobs.slice(0, displayLimit)" :key="job.job_url"
+                :href="job.job_url || '#'" target="_blank" rel="noopener noreferrer" class="job-card">
+                <div class="job-ico">
+                  <img v-if="faviconOf(job)" :src="faviconOf(job)" alt="" loading="lazy"
+                    @error="e => { e.target.style.display='none' }">
+                  <span v-else>{{ initOf(job) }}</span>
+                </div>
+                <div class="job-body">
+                  <div class="job-title">{{ job.title }}</div>
+                  <div class="job-meta">
+                    <span class="job-co" v-if="job.company">{{ job.company }}</span>
+                    <template v-if="locOf(job)">
+                      <span style="color:var(--t3);font-size:10px">·</span>
+                      <span class="badge" :class="locOf(job).cls">{{ locOf(job).label }}</span>
+                    </template>
+                    <template v-if="senOf(job)">
+                      <span style="color:var(--t3);font-size:10px">·</span>
+                      <span class="badge" :class="senOf(job).cls">{{ senOf(job).label }}</span>
+                    </template>
+                    <span v-if="job.not_on_linkedin" class="badge b-violet">Exclusiva</span>
+                  </div>
+                </div>
+                <div class="job-time" :class="{hot: timeOf(job).hot}">{{ timeOf(job).text }}</div>
+              </a>
+              <div v-if="filteredJobs.length > displayLimit" style="padding:14px;text-align:center">
+                <button class="btn btn-ghost btn-sm" @click="displayLimit += 100">
+                  Ver más ({{ filteredJobs.length - displayLimit }} restantes)
+                </button>
+              </div>
+            </template>
+            <div v-else class="empty">
+              <div style="font-size:24px;margin-bottom:8px">·</div>
+              Sin resultados. Ajustá los filtros.
+            </div>
+          </div>
+
+        </div><!-- /buscador -->
+
+      </div><!-- /content -->
+    </div><!-- /body -->
+
+    <!-- Modal edición -->
+    <div class="modal-bg" v-if="editModal" @click.self="closeEdit">
+      <div class="modal-box card card-body">
+        <div style="font-size:13px;font-weight:600;color:var(--w);margin-bottom:16px;display:flex;justify-content:space-between;align-items:center">
+          Editar criterios
+          <button class="btn btn-muted btn-sm" @click="closeEdit" style="padding:2px 6px">✕</button>
         </div>
-
-        <div class="card p-7">
-          <form id="loginForm" class="space-y-4" novalidate>
-            <div>
-              <label for="loginEmail" class="block text-xs font-medium text-zinc-400 mb-1.5">Email</label>
-              <input type="email" id="loginEmail" placeholder="tu@email.com"
-                required autocomplete="email" class="field"/>
-            </div>
-            <div>
-              <label for="loginPassword" class="block text-xs font-medium text-zinc-400 mb-1.5">Contraseña</label>
-              <input type="password" id="loginPassword" placeholder="••••••••"
-                required autocomplete="current-password" class="field"/>
-            </div>
-            <button type="submit" id="loginBtn" class="btn-primary w-full mt-1">
-              Iniciar sesión
-            </button>
-          </form>
-
-          <div id="loginError"
-            class="hidden mt-4 flex items-center gap-2 text-xs text-red-400 bg-red-950/60 border border-red-900/60 rounded-lg px-3 py-2.5">
-            <svg class="w-4 h-4 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
-              <path stroke-linecap="round" stroke-linejoin="round" d="M12 9v4m0 4h.01M21 12A9 9 0 1 1 3 12a9 9 0 0 1 18 0z"/>
-            </svg>
-            <span></span>
+        <div class="field-group">
+          <label class="field-label">Tecnologías</label>
+          <input type="text" v-model="editTech">
+        </div>
+        <div class="field-group">
+          <label class="field-label">Modalidad</label>
+          <div class="check-row">
+            <label class="check-item"><input type="checkbox" v-model="editJobType" value="remote"> Remoto</label>
+            <label class="check-item"><input type="checkbox" v-model="editJobType" value="hybrid"> Híbrido</label>
+            <label class="check-item"><input type="checkbox" v-model="editJobType" value="on-site"> Presencial</label>
           </div>
+        </div>
+        <div class="field-group">
+          <label class="field-label">Ubicación</label>
+          <input type="text" v-model="editLocation">
+        </div>
+        <div class="err" v-if="editError">{{ editError }}</div>
+        <div style="display:flex;gap:8px;margin-top:4px">
+          <button class="btn btn-primary" style="flex:1" :disabled="editLoading" @click="saveEdit">
+            {{ editLoading ? 'Guardando…' : 'Guardar' }}
+          </button>
+          <button class="btn btn-ghost" style="flex:1" @click="closeEdit">Cancelar</button>
         </div>
       </div>
     </div>
 
-    <!-- ═══════════════════════════════════════════════════
-         VISTA: DASHBOARD
-    ════════════════════════════════════════════════════ -->
-    <div id="dashboardView" class="hidden min-h-screen flex flex-col">
-
-      <!-- Header -->
-      <header class="sticky top-0 z-50 bg-zinc-950/95 backdrop-blur-sm border-b border-zinc-800/70"
-              style="height:52px">
-        <div class="px-4 h-full flex items-center justify-between gap-3">
-          <div class="flex items-center gap-3">
-            <!-- Hamburger (mobile) -->
-            <button onclick="toggleSidebar()"
-              class="lg:hidden p-1.5 rounded-lg text-zinc-500 hover:text-zinc-200 hover:bg-zinc-800/60 transition"
-              aria-label="Menú">
-              <svg class="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
-                <path stroke-linecap="round" stroke-linejoin="round" d="M4 6h16M4 12h16M4 18h16"/>
-              </svg>
-            </button>
-            <!-- Wordmark -->
-            <div class="flex items-center gap-2">
-              <div class="w-6 h-6 rounded-md flex items-center justify-center"
-                   style="background: linear-gradient(135deg,#6366f1,#8b5cf6);">
-                <svg class="w-3.5 h-3.5 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2.5">
-                  <path stroke-linecap="round" stroke-linejoin="round" d="M21 21l-4.35-4.35M17 11A6 6 0 1 1 5 11a6 6 0 0 1 12 0z"/>
-                </svg>
-              </div>
-              <span class="text-sm font-bold text-white tracking-tight">trovilo</span>
-            </div>
-          </div>
-          <button id="logoutBtn" onclick="handleLogout()" class="btn-ghost">Cerrar sesión</button>
-        </div>
-      </header>
-
-      <!-- Body: sidebar + contenido -->
-      <div class="flex flex-1 overflow-hidden">
-
-        <!-- Sidebar -->
-        <aside id="sidebar"
-          class="w-56 shrink-0 border-r border-zinc-800/70 flex flex-col py-4 px-2
-                 transition-transform duration-200
-                 fixed lg:static inset-y-0 left-0 z-40 mt-[52px] lg:mt-0
-                 -translate-x-full lg:translate-x-0"
-          style="background: #111113;">
-
-          <p class="text-[10px] uppercase tracking-widest text-zinc-700 px-3 mb-2 font-semibold">Navegación</p>
-
-          <nav class="space-y-0.5">
-            <!-- Búsqueda -->
-            <button id="navBusqueda" onclick="switchPanel('busqueda')"
-              class="nav-item active w-full flex items-center gap-2.5 px-3 py-2.5 rounded-lg text-sm font-medium">
-              <svg class="w-4 h-4 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
-                <path stroke-linecap="round" stroke-linejoin="round" d="M10.5 6h9.75M10.5 6a1.5 1.5 0 1 1-3 0m3 0a1.5 1.5 0 1 0-3 0M3.75 6H7.5m3 12h9.75m-9.75 0a1.5 1.5 0 0 1-3 0m3 0a1.5 1.5 0 0 0-3 0m-3.75 0H7.5m9-6h3.75m-3.75 0a1.5 1.5 0 0 1-3 0m3 0a1.5 1.5 0 0 0-3 0m-9.75 0h9.75"/>
-              </svg>
-              Búsqueda
-            </button>
-
-            <!-- Buscador -->
-            <button id="navBuscador" onclick="switchPanel('buscador')"
-              class="nav-item w-full flex items-center gap-2.5 px-3 py-2.5 rounded-lg text-sm font-medium">
-              <svg class="w-4 h-4 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
-                <path stroke-linecap="round" stroke-linejoin="round" d="M20.25 14.15v4.25c0 1.094-.787 2.036-1.872 2.18-2.087.277-4.216.42-6.378.42s-4.291-.143-6.378-.42c-1.085-.144-1.872-1.086-1.872-2.18v-4.25m16.5 0a2.18 2.18 0 0 0 .75-1.661V8.706c0-1.081-.768-2.015-1.837-2.175a48.114 48.114 0 0 0-3.413-.387m4.5 8.006c-.194.165-.42.295-.673.38A23.978 23.978 0 0 1 12 15.75c-2.648 0-5.195-.429-7.577-1.22a2.016 2.016 0 0 1-.673-.38m0 0A2.18 2.18 0 0 1 3 12.489V8.706c0-1.081.768-2.015 1.837-2.175a48.111 48.111 0 0 1 3.413-.387m7.5 0V5.25A2.25 2.25 0 0 0 13.5 3h-3a2.25 2.25 0 0 0-2.25 2.25v.894m7.5 0a48.667 48.667 0 0 0-7.5 0M12 12.75h.008v.008H12v-.008Z"/>
-              </svg>
-              Empleos
-            </button>
-
-            <!-- Fuentes -->
-            <button id="navFuentes" onclick="switchPanel('fuentes')"
-              class="nav-item w-full flex items-center gap-2.5 px-3 py-2.5 rounded-lg text-sm font-medium">
-              <svg class="w-4 h-4 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
-                <path stroke-linecap="round" stroke-linejoin="round" d="M12 21a9.004 9.004 0 0 0 8.716-6.747M12 21a9.004 9.004 0 0 1-8.716-6.747M12 21c2.485 0 4.5-4.03 4.5-9S14.485 3 12 3m0 18c-2.485 0-4.5-4.03-4.5-9S9.515 3 12 3m0 0a8.997 8.997 0 0 1 7.843 4.582M12 3a8.997 8.997 0 0 0-7.843 4.582m15.686 0A11.953 11.953 0 0 1 12 10.5c-2.998 0-5.74-1.1-7.843-2.918m15.686 0A8.959 8.959 0 0 1 21 12c0 .778-.099 1.533-.284 2.253m0 0A17.919 17.919 0 0 1 12 16.5c-3.162 0-6.133-.815-8.716-2.247m0 0A9.015 9.015 0 0 1 3 12c0-1.605.42-3.113 1.157-4.418"/>
-              </svg>
-              Fuentes
-            </button>
-
-            <!-- Miembros -->
-            <button id="navMiembros" onclick="switchPanel('miembros')"
-              class="nav-item w-full flex items-center gap-2.5 px-3 py-2.5 rounded-lg text-sm font-medium">
-              <svg class="w-4 h-4 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
-                <path stroke-linecap="round" stroke-linejoin="round" d="M15 19.128a9.38 9.38 0 0 0 2.625.372 9.337 9.337 0 0 0 4.121-.952 4.125 4.125 0 0 0-7.533-2.493M15 19.128v-.003c0-1.113-.285-2.16-.786-3.07M15 19.128v.106A12.318 12.318 0 0 1 8.624 21c-2.331 0-4.512-.645-6.374-1.766l-.001-.109a6.375 6.375 0 0 1 11.964-3.07M12 6.375a3.375 3.375 0 1 1-6.75 0 3.375 3.375 0 0 1 6.75 0Zm8.25 2.25a2.625 2.625 0 1 1-5.25 0 2.625 2.625 0 0 1 5.25 0Z"/>
-              </svg>
-              Miembros
-            </button>
-          </nav>
-
-          <div class="mt-auto px-3 pt-4 border-t border-zinc-800/60">
-            <p class="text-[10px] text-zinc-700 text-center">trovilo © 2025</p>
-          </div>
-        </aside>
-
-        <!-- Overlay mobile -->
-        <div id="sidebarOverlay" onclick="toggleSidebar()"
-          class="hidden fixed inset-0 z-30 bg-black/60 backdrop-blur-sm lg:hidden"></div>
-
-        <!-- Contenido principal -->
-        <main class="flex-1 overflow-y-auto bg-zinc-950 min-w-0">
-
-          <!-- ══ PANEL: BÚSQUEDA ══════════════════════════ -->
-          <div id="panelBusqueda" class="max-w-lg mx-auto px-5 py-10">
-
-            <div class="mb-7">
-              <h2 class="text-xl font-bold text-white">Configurar búsqueda</h2>
-              <p class="mt-1 text-sm text-zinc-500">Criterios para el scraper de Telegram</p>
-            </div>
-
-            <div class="card p-7">
-              <form id="filterForm" class="space-y-5" novalidate>
-
-                <!-- Tecnologías -->
-                <div>
-                  <label for="tech_stack" class="block text-xs font-medium text-zinc-400 mb-1.5">
-                    Tecnologías
-                  </label>
-                  <input type="text" id="tech_stack" name="tech_stack"
-                    placeholder="Python, FastAPI, PostgreSQL…" required class="field"/>
-                  <p class="mt-1.5 text-xs text-zinc-600">Separadas por comas</p>
-
-                  <!-- Nube de tags -->
-                  <div id="techCloud" class="hidden mt-3 p-3 rounded-lg bg-zinc-900 border border-zinc-800">
-                    <p class="text-xs text-zinc-500 mb-2">
-                      Buscadas por otros miembros
-                      <span class="text-zinc-600"> · clic para agregar</span>
-                    </p>
-                    <div id="techTags" class="flex flex-wrap gap-1.5"></div>
-                    <div class="flex gap-2 mt-2.5">
-                      <input id="newTagInput" type="text" placeholder="Nuevo tag…"
-                        class="field py-1.5 text-xs"/>
-                      <button type="button" onclick="addNewTag()"
-                        class="shrink-0 rounded-lg bg-zinc-700 hover:bg-indigo-600 text-zinc-300 hover:text-white text-xs px-3 py-1.5 transition font-medium">
-                        + Agregar
-                      </button>
-                    </div>
-                  </div>
-                </div>
-
-                <!-- Modalidad -->
-                <div>
-                  <label class="block text-xs font-medium text-zinc-400 mb-2">Modalidad</label>
-                  <div class="flex gap-4">
-                    <label class="flex items-center gap-2 cursor-pointer text-sm text-zinc-300 select-none">
-                      <input type="checkbox" name="job_type" value="remote"
-                        class="rounded bg-zinc-800 border-zinc-600 text-indigo-500 focus:ring-indigo-500 focus:ring-offset-zinc-900 focus:ring-1"/>
-                      Remoto
-                    </label>
-                    <label class="flex items-center gap-2 cursor-pointer text-sm text-zinc-300 select-none">
-                      <input type="checkbox" name="job_type" value="hybrid"
-                        class="rounded bg-zinc-800 border-zinc-600 text-indigo-500 focus:ring-indigo-500 focus:ring-offset-zinc-900 focus:ring-1"/>
-                      Híbrido
-                    </label>
-                    <label class="flex items-center gap-2 cursor-pointer text-sm text-zinc-300 select-none">
-                      <input type="checkbox" name="job_type" value="on-site"
-                        class="rounded bg-zinc-800 border-zinc-600 text-indigo-500 focus:ring-indigo-500 focus:ring-offset-zinc-900 focus:ring-1"/>
-                      Presencial
-                    </label>
-                  </div>
-                  <p id="jobTypeError" class="mt-1.5 text-xs text-red-400 hidden flex items-center gap-1">
-                    Seleccioná al menos una modalidad.
-                  </p>
-                </div>
-
-                <!-- Ubicación -->
-                <div>
-                  <label for="location" class="block text-xs font-medium text-zinc-400 mb-1.5">Ubicación</label>
-                  <input type="text" id="location" name="location"
-                    placeholder="Argentina, Buenos Aires…" required class="field"/>
-                  <div class="flex flex-wrap gap-1.5 mt-2">
-                    <button type="button" onclick="setLocation('Argentina')"
-                      class="location-tag px-2.5 py-1 rounded-full text-xs bg-zinc-800 border border-zinc-700 text-zinc-400 hover:bg-indigo-600/30 hover:text-indigo-300 hover:border-indigo-700 transition">
-                      Argentina
-                    </button>
-                    <button type="button" onclick="setLocation('Uruguay')"
-                      class="location-tag px-2.5 py-1 rounded-full text-xs bg-zinc-800 border border-zinc-700 text-zinc-400 hover:bg-indigo-600/30 hover:text-indigo-300 hover:border-indigo-700 transition">
-                      Uruguay
-                    </button>
-                    <button type="button" onclick="setLocation('Latin America')"
-                      class="location-tag px-2.5 py-1 rounded-full text-xs bg-zinc-800 border border-zinc-700 text-zinc-400 hover:bg-indigo-600/30 hover:text-indigo-300 hover:border-indigo-700 transition">
-                      Latin America
-                    </button>
-                    <button type="button" onclick="setLocation('Latam')"
-                      class="location-tag px-2.5 py-1 rounded-full text-xs bg-zinc-800 border border-zinc-700 text-zinc-400 hover:bg-indigo-600/30 hover:text-indigo-300 hover:border-indigo-700 transition">
-                      Latam
-                    </button>
-                  </div>
-                </div>
-
-                <!-- Telegram -->
-                <div>
-                  <label for="telegram_user" class="block text-xs font-medium text-zinc-400 mb-1.5">
-                    Usuario de Telegram
-                  </label>
-                  <div class="relative">
-                    <span class="absolute inset-y-0 left-3 flex items-center text-zinc-500 text-sm select-none pointer-events-none">@</span>
-                    <input type="text" id="telegram_user" name="telegram_user"
-                      placeholder="tuusuario" required
-                      class="field pl-7"/>
-                  </div>
-                  <p class="mt-1.5 text-xs text-zinc-600">Sin el símbolo @</p>
-                </div>
-
-                <button type="submit" id="submitBtn" class="btn-primary w-full">
-                  Guardar criterios
-                </button>
-              </form>
-
-              <div id="statusMsg" class="mt-5 hidden text-sm text-center rounded-lg px-4 py-3 font-medium"></div>
-            </div>
-          </div>
-
-          <!-- ══ PANEL: EMPLEOS (Buscador) ════════════════ -->
-          <div id="panelBuscador" class="hidden flex flex-col" style="height:calc(100vh - 52px)">
-
-            <!-- Barra de filtros sticky -->
-            <div class="shrink-0 bg-zinc-950 border-b border-zinc-800/70 px-4 pt-3 pb-2.5 space-y-2">
-
-              <!-- Fila 1: búsqueda + selects -->
-              <div class="flex gap-2 flex-wrap items-center">
-                <!-- Campo de búsqueda -->
-                <div class="relative flex-1 min-w-[160px]">
-                  <svg class="pointer-events-none absolute left-2.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-zinc-600"
-                    fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
-                    <path stroke-linecap="round" stroke-linejoin="round" d="M21 21l-4.35-4.35M17 11A6 6 0 1 1 5 11a6 6 0 0 1 12 0z"/>
-                  </svg>
-                  <input id="jobSearchInput" type="search" placeholder="Título, empresa…"
-                    oninput="_filterJobs()" autocomplete="off"
-                    class="w-full bg-zinc-900 border border-zinc-800 rounded-lg text-xs text-zinc-200
-                           placeholder-zinc-600 pl-8 pr-3 py-2 focus:outline-none focus:border-zinc-600
-                           focus:ring-1 focus:ring-zinc-700 transition"/>
-                </div>
-
-                <select id="jobLocationInput" onchange="_filterJobs()"
-                  class="bg-zinc-900 border border-zinc-800 rounded-lg text-xs text-zinc-400 px-2.5 py-2
-                         focus:outline-none focus:border-zinc-600 cursor-pointer">
-                  <option value="">Ubicación</option>
-                  <option value="remote">Remote</option>
-                  <option value="argentina">Argentina</option>
-                  <option value="latam">LATAM</option>
-                  <option value="uruguay">Uruguay</option>
-                  <option value="colombia">Colombia</option>
-                  <option value="mexico">México</option>
-                  <option value="brasil">Brasil</option>
-                  <option value="united states">USA</option>
-                </select>
-
-                <select id="jobSeniorityFilter" onchange="_filterJobs()"
-                  class="bg-zinc-900 border border-zinc-800 rounded-lg text-xs text-zinc-400 px-2.5 py-2
-                         focus:outline-none focus:border-zinc-600 cursor-pointer">
-                  <option value="">Experiencia</option>
-                  <option value="junior">Junior</option>
-                  <option value="mid">Mid</option>
-                  <option value="senior">Senior</option>
-                  <option value="lead">Lead</option>
-                </select>
-
-                <select id="jobTimeFilter" onchange="_setTimeFilterFromSelect(this.value)"
-                  class="bg-zinc-900 border border-zinc-800 rounded-lg text-xs text-zinc-400 px-2.5 py-2
-                         focus:outline-none focus:border-zinc-600 cursor-pointer">
-                  <option value="0">Fecha</option>
-                  <option value="24">24 h</option>
-                  <option value="48">48 h</option>
-                  <option value="72">72 h</option>
-                  <option value="168">Esta semana</option>
-                </select>
-              </div>
-
-              <!-- Fila 2: pills + toggles + stats -->
-              <div class="flex items-center gap-1.5 flex-wrap">
-
-                <!-- Modalidad pills -->
-                <button id="modeBtn-all"    onclick="_setModeFilter('all')"    class="mode-pill active">Todos</button>
-                <button id="modeBtn-remote" onclick="_setModeFilter('remote')" class="mode-pill">Remote</button>
-                <button id="modeBtn-hybrid" onclick="_setModeFilter('hybrid')" class="mode-pill">Híbrido</button>
-
-                <div class="w-px h-4 bg-zinc-800 mx-0.5"></div>
-
-                <!-- Toggle exclusivas -->
-                <button id="exclusivasToggle" onclick="_toggleExclusivas()"
-                  class="flex items-center gap-1.5 px-2 py-1 rounded-md text-[11px] border border-transparent
-                         text-zinc-500 hover:text-zinc-300 transition font-medium">
-                  <span id="exclusivasIcon" class="toggle-track">
-                    <span id="exclusivasThumb" class="toggle-thumb"></span>
-                  </span>
-                  <span id="exclusivasLabel">Solo exclusivas</span>
-                </button>
-
-                <div class="w-px h-4 bg-zinc-800 mx-0.5"></div>
-
-                <!-- Scrapear fuentes -->
-                <select id="communitySourceSelect"
-                  class="bg-zinc-900 border border-zinc-800 rounded-md text-[11px] text-zinc-400 px-2 py-1
-                         focus:outline-none focus:border-zinc-600 cursor-pointer">
-                  <option value="all">Todas las fuentes</option>
-                  <option value="rocketship">Remote Rocketship</option>
-                  <option value="remoteok">RemoteOK</option>
-                  <option value="remotive">Remotive</option>
-                  <option value="wwr">We Work Remotely</option>
-                  <option value="arbeitnow">Arbeitnow</option>
-                  <option value="cryptojobslist">CryptoJobsList</option>
-                </select>
-                <button id="communitySearchBtn" onclick="scrapeCommunitySources()"
-                  class="flex items-center gap-1 px-2.5 py-1 rounded-md text-[11px] font-semibold
-                         bg-indigo-600/90 text-white hover:bg-indigo-500 border border-indigo-500/60
-                         disabled:opacity-50 disabled:cursor-not-allowed transition">
-                  <svg class="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2.5">
-                    <path stroke-linecap="round" stroke-linejoin="round" d="M16.023 9.348h4.992v-.001M2.985 19.644v-4.992m0 0h4.992m-4.993 0 3.181 3.183a8.25 8.25 0 0 0 13.803-3.7M4.031 9.865a8.25 8.25 0 0 1 13.803-3.7l3.181 3.182m0-4.991v4.99"/>
-                  </svg>
-                  Scrapear
-                </button>
-                <span id="communitySearchStatus" class="text-[11px] text-zinc-600"></span>
-
-                <!-- Stats -->
-                <div class="ml-auto flex items-center gap-2">
-                  <span id="jobResultsCount" class="text-[11px] text-zinc-600 tabular-nums"></span>
-                  <span id="jobNewCount" class="hidden text-[11px] text-emerald-500 tabular-nums font-medium">
-                    ⚡ <span id="jobNewCountVal"></span> nuevas
-                  </span>
-                </div>
-              </div>
-            </div>
-
-            <!-- Lista de ofertas -->
-            <div id="jobResultsContainer" class="flex-1 overflow-y-auto min-h-0 divide-y divide-zinc-800/40">
-              <!-- Skeleton loading -->
-              <div id="jobsSkeleton">
-                <div class="flex items-center gap-3 px-5 py-4">
-                  <div class="skeleton w-9 h-9 rounded-lg shrink-0"></div>
-                  <div class="flex-1 space-y-2">
-                    <div class="skeleton h-3.5 w-2/3"></div>
-                    <div class="skeleton h-3 w-1/3"></div>
-                  </div>
-                  <div class="skeleton h-3 w-12"></div>
-                </div>
-                <div class="flex items-center gap-3 px-5 py-4">
-                  <div class="skeleton w-9 h-9 rounded-lg shrink-0"></div>
-                  <div class="flex-1 space-y-2">
-                    <div class="skeleton h-3.5 w-3/4"></div>
-                    <div class="skeleton h-3 w-2/5"></div>
-                  </div>
-                  <div class="skeleton h-3 w-12"></div>
-                </div>
-                <div class="flex items-center gap-3 px-5 py-4">
-                  <div class="skeleton w-9 h-9 rounded-lg shrink-0"></div>
-                  <div class="flex-1 space-y-2">
-                    <div class="skeleton h-3.5 w-1/2"></div>
-                    <div class="skeleton h-3 w-1/4"></div>
-                  </div>
-                  <div class="skeleton h-3 w-12"></div>
-                </div>
-                <div class="flex items-center gap-3 px-5 py-4">
-                  <div class="skeleton w-9 h-9 rounded-lg shrink-0"></div>
-                  <div class="flex-1 space-y-2">
-                    <div class="skeleton h-3.5 w-2/3"></div>
-                    <div class="skeleton h-3 w-2/5"></div>
-                  </div>
-                  <div class="skeleton h-3 w-12"></div>
-                </div>
-                <div class="flex items-center gap-3 px-5 py-4">
-                  <div class="skeleton w-9 h-9 rounded-lg shrink-0"></div>
-                  <div class="flex-1 space-y-2">
-                    <div class="skeleton h-3.5 w-4/5"></div>
-                    <div class="skeleton h-3 w-1/3"></div>
-                  </div>
-                  <div class="skeleton h-3 w-12"></div>
-                </div>
-              </div>
-            </div>
-          </div>
-
-          <!-- ══ PANEL: FUENTES ═══════════════════════════ -->
-          <div id="panelFuentes" class="hidden max-w-4xl mx-auto px-5 py-10">
-
-            <div class="mb-7">
-              <h2 class="text-xl font-bold text-white">Fuentes de scraping</h2>
-              <p class="mt-1 text-sm text-zinc-500">Dominios que el scraper visita en cada ejecución</p>
-            </div>
-
-            <div class="grid grid-cols-1 lg:grid-cols-2 gap-5 items-start">
-
-              <!-- Lista de fuentes activas -->
-              <div class="card p-5">
-                <div class="flex items-center justify-between mb-4">
-                  <h3 class="text-sm font-semibold text-zinc-100">Fuentes activas</h3>
-                  <span id="fuentesActiveCount"
-                    class="text-xs bg-indigo-950/60 text-indigo-400 border border-indigo-800/50 rounded-full px-2.5 py-0.5 font-semibold"></span>
-                </div>
-
-                <div class="relative mb-3">
-                  <svg class="pointer-events-none absolute left-2.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-zinc-600"
-                    fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
-                    <path stroke-linecap="round" stroke-linejoin="round" d="M21 21l-4.35-4.35M17 11A6 6 0 1 1 5 11a6 6 0 0 1 12 0z"/>
-                  </svg>
-                  <input id="fuentesSearch" type="text" placeholder="Filtrar dominios…"
-                    oninput="filterFuentesList(this.value)"
-                    class="field py-1.5 pl-8 text-xs"/>
-                </div>
-
-                <div id="fuentesList" class="space-y-0.5 max-h-96 overflow-y-auto pr-1">
-                  <!-- Skeleton -->
-                  <div class="space-y-1 py-2">
-                    <div class="skeleton h-7 w-full rounded-lg"></div>
-                    <div class="skeleton h-7 w-5/6 rounded-lg"></div>
-                    <div class="skeleton h-7 w-full rounded-lg"></div>
-                    <div class="skeleton h-7 w-4/5 rounded-lg"></div>
-                  </div>
-                </div>
-              </div>
-
-              <!-- Agregar fuentes (colapsable) -->
-              <div class="card overflow-hidden">
-                <button type="button" onclick="toggleExpandirFuentes()"
-                  class="w-full flex items-center justify-between px-5 py-4 text-left hover:bg-zinc-900/40 transition">
-                  <div class="flex items-center gap-2.5">
-                    <div class="w-7 h-7 rounded-lg bg-zinc-800 flex items-center justify-center">
-                      <svg class="w-3.5 h-3.5 text-zinc-400" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2.5">
-                        <path stroke-linecap="round" stroke-linejoin="round" d="M12 4.5v15m7.5-7.5h-15"/>
-                      </svg>
-                    </div>
-                    <div>
-                      <span class="text-sm font-semibold text-zinc-100">Agregar fuentes</span>
-                      <span class="ml-2 text-xs text-zinc-600">opcional</span>
-                    </div>
-                  </div>
-                  <svg id="expandirChevron" class="w-4 h-4 text-zinc-600 transition-transform duration-200"
-                    fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
-                    <path stroke-linecap="round" stroke-linejoin="round" d="M19 9l-7 7-7-7"/>
-                  </svg>
-                </button>
-
-                <div id="expandirFuentesBody" class="hidden border-t border-zinc-800/60 px-5 pb-5">
-                  <p class="text-xs text-zinc-500 mt-4 mb-4 leading-relaxed">
-                    Subí un CSV/Excel con URLs en la primera columna, o pegá las URLs manualmente.
-                  </p>
-
-                  <div class="mb-3">
-                    <label class="block text-xs font-medium text-zinc-500 mb-1.5">Archivo CSV / Excel</label>
-                    <input type="file" id="sourceFileInput" accept=".csv,.xlsx,.xls"
-                      onchange="handleSourceUpload(event)"
-                      class="w-full text-xs text-zinc-400 bg-zinc-900 border border-zinc-800 rounded-lg
-                             px-3 py-2 file:mr-3 file:py-1 file:px-3 file:rounded-md file:border-0
-                             file:text-xs file:font-semibold file:bg-indigo-600 file:text-white
-                             hover:file:bg-indigo-500 cursor-pointer transition"/>
-                  </div>
-
-                  <div class="mb-3">
-                    <label class="block text-xs font-medium text-zinc-500 mb-1.5">O pegá URLs (una por línea)</label>
-                    <textarea id="manualUrls" rows="4"
-                      placeholder="https://jobs.example.com&#10;https://anotherboard.io/jobs"
-                      class="field text-xs resize-none"></textarea>
-                  </div>
-
-                  <button type="button" onclick="processManualSources()"
-                    class="w-full rounded-lg bg-zinc-800 hover:bg-zinc-700 border border-zinc-700 text-zinc-300 hover:text-white
-                           text-xs font-semibold py-2 transition">
-                    Extraer dominios
-                  </button>
-
-                  <!-- Dominios extraídos -->
-                  <div id="sourcesResult" class="hidden mt-4">
-                    <p class="text-xs text-zinc-500 mb-2">
-                      Dominios extraídos
-                      <span id="sourcesCount" class="text-indigo-400 font-semibold"></span>
-                    </p>
-                    <div id="sourcesTags" class="flex flex-wrap gap-1.5 mb-3"></div>
-                    <button type="button"
-                      onclick="validateDomainsAgainstSystem(window._lastParsedDomains || [])"
-                      class="btn-primary text-xs py-1.5 px-4">
-                      Validar contra el sistema
-                    </button>
-                  </div>
-
-                  <!-- Panel de validación -->
-                  <div id="validationPanel" class="hidden mt-5 space-y-4">
-                    <div id="alreadyInSystem" class="hidden">
-                      <p class="text-xs text-zinc-500 mb-1.5 flex items-center gap-1">
-                        <span class="text-green-500">✓</span> Ya en el sistema
-                        <span id="alreadyCount" class="text-green-400 font-semibold"></span>
-                      </p>
-                      <div id="alreadyTags" class="flex flex-wrap gap-1.5"></div>
-                    </div>
-
-                    <div id="newDomainsSection" class="hidden">
-                      <p class="text-xs text-zinc-500 mb-2 flex items-center gap-1">
-                        <span class="text-yellow-500">+</span> Nuevos
-                        <span id="newCount" class="text-yellow-400 font-semibold"></span>
-                      </p>
-                      <div class="rounded-lg border border-zinc-800 overflow-hidden">
-                        <table class="w-full text-xs">
-                          <thead class="bg-zinc-900 text-zinc-500 border-b border-zinc-800">
-                            <tr>
-                              <th class="px-3 py-2.5 text-left font-medium">
-                                <label class="flex items-center gap-2 cursor-pointer select-none">
-                                  <input type="checkbox" id="selectAllNew" checked
-                                    onchange="toggleAllNewDomains(this.checked)"
-                                    class="rounded bg-zinc-800 border-zinc-700 text-indigo-500"/>
-                                  Seleccionar todos
-                                </label>
-                              </th>
-                            </tr>
-                          </thead>
-                          <tbody id="newDomainsTableBody" class="divide-y divide-zinc-800/50 text-zinc-400"></tbody>
-                        </table>
-                      </div>
-                      <button id="addSourcesBtn" type="button" onclick="saveSelectedDomains()"
-                        class="btn-primary mt-3 w-full text-xs py-2 disabled:opacity-50">
-                        Agregar fuentes seleccionadas
-                      </button>
-                      <div id="saveDomainsMsg" class="hidden mt-2 text-xs text-center rounded-lg px-3 py-2 font-medium"></div>
-                    </div>
-
-                    <!-- Alerta de éxito -->
-                    <div id="sourcesSuccessAlert"
-                      class="hidden mt-4 flex items-start gap-3 rounded-xl border border-emerald-700/40 bg-emerald-950/40 px-4 py-4">
-                      <svg class="w-5 h-5 text-emerald-400 shrink-0 mt-0.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
-                        <path stroke-linecap="round" stroke-linejoin="round" d="M9 12.75 11.25 15 15 9.75M21 12a9 9 0 1 1-18 0 9 9 0 0 1 18 0z"/>
-                      </svg>
-                      <div>
-                        <p class="text-sm font-semibold text-emerald-300">Fuentes agregadas</p>
-                        <p class="text-xs text-emerald-500/80 mt-0.5">
-                          Serán escrapadas en la próxima ejecución cron.
-                        </p>
-                      </div>
-                    </div>
-                  </div>
-                </div>
-              </div>
-            </div>
-          </div>
-
-          <!-- ══ PANEL: MIEMBROS ══════════════════════════ -->
-          <div id="panelMiembros" class="hidden max-w-4xl mx-auto px-5 py-10">
-
-            <div class="mb-7 flex items-center justify-between">
-              <div>
-                <h2 class="text-xl font-bold text-white">Miembros</h2>
-                <p class="mt-1 text-sm text-zinc-500">Criterios de búsqueda registrados por usuario</p>
-              </div>
-              <span id="membersCount"
-                class="text-xs bg-indigo-950/60 text-indigo-400 border border-indigo-800/50 rounded-full px-2.5 py-0.5 font-semibold"></span>
-            </div>
-
-            <div class="card overflow-hidden">
-              <div class="overflow-x-auto">
-                <table class="w-full text-sm text-left">
-                  <thead class="bg-zinc-900/60 border-b border-zinc-800/60">
-                    <tr class="text-xs text-zinc-500 uppercase tracking-wide">
-                      <th class="px-4 py-3 font-semibold">Usuario</th>
-                      <th class="px-4 py-3 font-semibold">Tecnologías</th>
-                      <th class="px-4 py-3 font-semibold">Modalidad</th>
-                      <th class="px-4 py-3 font-semibold">Ubicación</th>
-                      <th class="px-4 py-3 font-semibold text-right">Acciones</th>
-                    </tr>
-                  </thead>
-                  <tbody id="membersTableBody" class="divide-y divide-zinc-800/40 text-zinc-300"></tbody>
-                </table>
-              </div>
-
-              <!-- Estado vacío -->
-              <div id="membersEmpty" class="hidden py-20 text-center">
-                <div class="inline-flex items-center justify-center w-12 h-12 rounded-2xl bg-zinc-800 mb-4">
-                  <svg class="w-6 h-6 text-zinc-500" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.5">
-                    <path stroke-linecap="round" stroke-linejoin="round" d="M15.75 6a3.75 3.75 0 1 1-7.5 0 3.75 3.75 0 0 1 7.5 0ZM4.501 20.118a7.5 7.5 0 0 1 14.998 0A17.933 17.933 0 0 1 12 21.75c-2.676 0-5.216-.584-7.499-1.632Z"/>
-                  </svg>
-                </div>
-                <p class="text-sm text-zinc-500">No hay miembros registrados.</p>
-              </div>
-
-              <!-- Estado cargando -->
-              <div id="membersLoading" class="divide-y divide-zinc-800/40">
-                <div class="flex items-center gap-3 px-4 py-3.5">
-                  <div class="skeleton h-4 w-28 rounded"></div>
-                  <div class="skeleton h-4 w-40 rounded ml-2"></div>
-                  <div class="skeleton h-4 w-16 rounded ml-2"></div>
-                  <div class="skeleton h-4 w-24 rounded ml-2"></div>
-                </div>
-                <div class="flex items-center gap-3 px-4 py-3.5">
-                  <div class="skeleton h-4 w-24 rounded"></div>
-                  <div class="skeleton h-4 w-48 rounded ml-2"></div>
-                  <div class="skeleton h-4 w-14 rounded ml-2"></div>
-                  <div class="skeleton h-4 w-20 rounded ml-2"></div>
-                </div>
-                <div class="flex items-center gap-3 px-4 py-3.5">
-                  <div class="skeleton h-4 w-32 rounded"></div>
-                  <div class="skeleton h-4 w-36 rounded ml-2"></div>
-                  <div class="skeleton h-4 w-20 rounded ml-2"></div>
-                  <div class="skeleton h-4 w-28 rounded ml-2"></div>
-                </div>
-              </div>
-            </div>
-          </div>
-
-        </main>
-      </div>
-
-      <!-- Modal de edición -->
-      <div id="editModal"
-        class="hidden fixed inset-0 z-50 flex items-center justify-center bg-black/70 backdrop-blur-sm px-4">
-        <div class="w-full max-w-sm card p-6 space-y-4">
-          <div class="flex items-center justify-between">
-            <h3 class="text-sm font-semibold text-zinc-100">Editar criterios</h3>
-            <button onclick="closeEditModal()"
-              class="p-1 rounded-lg text-zinc-600 hover:text-zinc-300 hover:bg-zinc-800 transition">
-              <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
-                <path stroke-linecap="round" stroke-linejoin="round" d="M6 18 18 6M6 6l12 12"/>
-              </svg>
-            </button>
-          </div>
-
-          <input type="hidden" id="editId"/>
-
-          <div>
-            <label class="block text-xs font-medium text-zinc-500 mb-1.5">Tecnologías</label>
-            <input id="editTech" type="text" class="field text-sm"/>
-          </div>
-
-          <div>
-            <label class="block text-xs font-medium text-zinc-500 mb-2">Modalidad</label>
-            <div class="flex gap-4">
-              <label class="flex items-center gap-1.5 cursor-pointer text-sm text-zinc-300 select-none">
-                <input type="checkbox" class="edit-job-type rounded bg-zinc-800 border-zinc-700 text-indigo-500" value="remote"/> Remoto
-              </label>
-              <label class="flex items-center gap-1.5 cursor-pointer text-sm text-zinc-300 select-none">
-                <input type="checkbox" class="edit-job-type rounded bg-zinc-800 border-zinc-700 text-indigo-500" value="hybrid"/> Híbrido
-              </label>
-              <label class="flex items-center gap-1.5 cursor-pointer text-sm text-zinc-300 select-none">
-                <input type="checkbox" class="edit-job-type rounded bg-zinc-800 border-zinc-700 text-indigo-500" value="on-site"/> Presencial
-              </label>
-            </div>
-          </div>
-
-          <div>
-            <label class="block text-xs font-medium text-zinc-500 mb-1.5">Ubicación</label>
-            <input id="editLocation" type="text" class="field text-sm"/>
-          </div>
-
-          <div id="editError" class="hidden text-xs text-red-400 bg-red-950/40 border border-red-900/40 rounded-lg px-3 py-2">
-            Seleccioná al menos una modalidad.
-          </div>
-
-          <div class="flex gap-2.5 pt-1">
-            <button id="editSaveBtn" onclick="saveEdit()"
-              class="btn-primary flex-1 py-2 text-sm disabled:opacity-50">
-              Guardar
-            </button>
-            <button onclick="closeEditModal()"
-              class="flex-1 btn-ghost py-2 text-sm border-zinc-700">
-              Cancelar
-            </button>
-          </div>
-        </div>
-      </div>
-
-    </div><!-- /dashboardView -->
-
-    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
-    <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
-
-    <script>
-      // ─── Configuración ────────────────────────────────────────────────────
-      const SUPABASE_URL      = "https://elzivznpozizegymidqd.supabase.co";
-      const SUPABASE_ANON_KEY = "sb_publishable_ulcsSFE144n7bQwG9eTvkg_zUHy3VZM";
-      const TELEGRAM_CHANNEL_LINK = "https://t.me/+qUKDg8Nc1B5hOWNh";
-
-      const { createClient } = supabase;
-      const db = createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
-
-      // ─── Referencias DOM ──────────────────────────────────────────────────
-      const loginView     = document.getElementById("loginView");
-      const dashboardView = document.getElementById("dashboardView");
-      const loginForm     = document.getElementById("loginForm");
-      const loginError    = document.getElementById("loginError");
-      const loginBtn      = document.getElementById("loginBtn");
-      const filterForm    = document.getElementById("filterForm");
-      const submitBtn     = document.getElementById("submitBtn");
-      const statusMsg     = document.getElementById("statusMsg");
-
-      // ─── Vistas ───────────────────────────────────────────────────────────
-
-      function showDashboard() {
-        loginView.classList.add("hidden");
-        dashboardView.classList.remove("hidden");
-        loadTechCloud();
-        switchPanel("busqueda");
+  </template><!-- /dashboard -->
+
+</div><!-- #app -->
+
+<script src="https://cdn.jsdelivr.net/npm/vue@3/dist/vue.global.prod.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js" defer></script>
+
+<script>
+const SUPABASE_URL      = "https://elzivznpozizegymidqd.supabase.co";
+const SUPABASE_ANON_KEY = "sb_publishable_ulcsSFE144n7bQwG9eTvkg_zUHy3VZM";
+const TELEGRAM_LINK     = "https://t.me/+qUKDg8Nc1B5hOWNh";
+
+const { createClient } = supabase;
+const db = createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+
+const { createApp, computed } = Vue;
+
+createApp({
+  data() {
+    return {
+      TELEGRAM_LINK,
+      session: null,
+
+      // Login
+      loginEmail: '', loginPassword: '', loginLoading: false, loginError: '',
+      logoutLoading: false,
+
+      // Panel
+      panel: 'busqueda',
+
+      // Búsqueda form
+      form: { tech_stack: '', job_type: [], location: '', telegram_user: '' },
+      formLoading: false, formError: '', formSuccess: '', formSubmitted: false,
+      techCloud: [], newTag: '',
+
+      // Miembros
+      members: [], membersLoading: false,
+
+      // Edit modal
+      editModal: false, editRow: null,
+      editTech: '', editLocation: '', editJobType: [],
+      editLoading: false, editError: '',
+
+      // Fuentes
+      fuentes: [], fuentesLoading: false, fuentesSearch: '', fuentesOpen: false,
+      manualUrls: '', parsedDomains: [], alreadyDomains: [], newDomains: [],
+      selectedDomains: [], validationDone: false,
+      savingDomains: false, saveDomainsOk: false, saveDomainsErr: '',
+
+      // Buscador
+      jobs: [], jobsLoading: false, displayLimit: 100,
+      jobSearch: '', jobLocation: '', jobSeniority: '', jobTime: 0,
+      jobMode: 'all', soloExclusivas: false,
+      communitySource: 'all', scrapingCommunity: false,
+      communityStatus: '', communityStatusType: 'muted',
+    };
+  },
+
+  computed: {
+    filteredFuentes() {
+      const q = this.fuentesSearch.toLowerCase();
+      return q ? this.fuentes.filter(f => f.domain.includes(q)) : this.fuentes;
+    },
+
+    filteredJobs() {
+      let j = this.jobs;
+      const q   = this.jobSearch.toLowerCase();
+      const loc = this.jobLocation.toLowerCase();
+      const sen = this.jobSeniority.toLowerCase();
+
+      if (this.jobTime > 0) {
+        const cutoff = Date.now() - this.jobTime * 3_600_000;
+        j = j.filter(x => new Date(x.sent_at).getTime() >= cutoff);
       }
+      if (q) j = j.filter(x => `${x.title} ${x.company} ${x.job_url}`.toLowerCase().includes(q));
+      if (loc) j = j.filter(x => `${x.title} ${x.company} ${x.job_url}`.toLowerCase().includes(loc));
 
-      function showLogin() {
-        dashboardView.classList.add("hidden");
-        filterForm.reset();
-        statusMsg.classList.add("hidden");
-        loginView.classList.remove("hidden");
+      if (this.jobMode === 'remote')
+        j = j.filter(x => /\b(remote|remoto|anywhere|distributed|worldwide)\b/i.test(`${x.title} ${x.job_url}`));
+      else if (this.jobMode === 'hybrid')
+        j = j.filter(x => /\b(h[íi]brido|hybrid)\b/i.test(x.title ?? ''));
+
+      if (sen) {
+        const map = {
+          junior: /\b(junior|jr\.?|entry[\s-]level|intern|trainee)\b/i,
+          mid:    /\b(mid[\s-]?level|semi[\s-]?senior|ssr|pleno|middle)\b/i,
+          senior: /\b(senior|sr\.?)\b/i,
+          lead:   /\b(lead|staff|principal|architect|director|head of|manager|vp|chief)\b/i,
+        };
+        if (map[sen]) j = j.filter(x => map[sen].test(x.title ?? ''));
       }
+      if (this.soloExclusivas) j = j.filter(x => x.not_on_linkedin === true);
+      return j;
+    },
 
-      // ─── Sidebar toggle (mobile) ──────────────────────────────────────────
+    newJobsCount() {
+      const cutoff = Date.now() - 7 * 86_400_000;
+      return this.jobs.filter(j => new Date(j.sent_at).getTime() >= cutoff).length;
+    },
+  },
 
-      function toggleSidebar() {
-        const sidebar = document.getElementById("sidebar");
-        const overlay = document.getElementById("sidebarOverlay");
-        const isOpen  = !sidebar.classList.contains("-translate-x-full");
-        sidebar.classList.toggle("-translate-x-full", isOpen);
-        overlay.classList.toggle("hidden", isOpen);
-      }
+  methods: {
+    // ── Auth ──────────────────────────────────────────────
+    async init() {
+      const { data: { session } } = await db.auth.getSession();
+      this.session = session;
+      if (session) this.loadTechCloud();
+    },
 
-      // ─── Cambio de panel ─────────────────────────────────────────────────
-
-      function switchPanel(name) {
-        const panels = ["busqueda", "fuentes", "miembros", "buscador"];
-        for (const p of panels) {
-          const panel = document.getElementById(`panel${p.charAt(0).toUpperCase() + p.slice(1)}`);
-          const nav   = document.getElementById(`nav${p.charAt(0).toUpperCase() + p.slice(1)}`);
-          const active = p === name;
-          panel.classList.toggle("hidden", !active);
-          nav.classList.toggle("active", active);
-          if (active) panel.classList.add("panel-enter");
-        }
-
-        if (name === "fuentes")  loadFuentesList();
-        if (name === "miembros") loadMembersTable();
-        if (name === "buscador") fetchLiveJobs();
-
-        // Cerrar sidebar en mobile
-        const sidebar = document.getElementById("sidebar");
-        if (!sidebar.classList.contains("lg:translate-x-0")) {
-          sidebar.classList.add("-translate-x-full");
-          document.getElementById("sidebarOverlay").classList.add("hidden");
-        }
-      }
-
-      // ─── Fuentes ─────────────────────────────────────────────────────────
-
-      let _allFuentes = [];
-
-      async function loadFuentesList() {
-        const list    = document.getElementById("fuentesList");
-        const countEl = document.getElementById("fuentesActiveCount");
-
-        list.innerHTML = `
-          <div class="space-y-1 py-2">
-            <div class="skeleton h-7 w-full rounded-lg"></div>
-            <div class="skeleton h-7 w-5/6 rounded-lg"></div>
-            <div class="skeleton h-7 w-full rounded-lg"></div>
-            <div class="skeleton h-7 w-4/5 rounded-lg"></div>
-          </div>`;
-
-        try {
-          const { data, error } = await db.from("fuentes_scraper").select("id, domain").order("domain");
-          if (error) throw error;
-          _allFuentes = data || [];
-          countEl.textContent = `${_allFuentes.length} dominios`;
-          _renderFuentesList(_allFuentes);
-        } catch (e) {
-          list.innerHTML = `<p class="text-xs text-red-400 text-center py-4">Error: ${escapeHtml(e.message)}</p>`;
-        }
-      }
-
-      function _renderFuentesList(items) {
-        const list = document.getElementById("fuentesList");
-        if (!items.length) {
-          list.innerHTML = '<p class="text-xs text-zinc-600 text-center py-8">No hay fuentes registradas.</p>';
-          return;
-        }
-        list.innerHTML = items.map(f => `
-          <div class="group flex items-center justify-between gap-2 px-2.5 py-2 rounded-lg hover:bg-zinc-800/50 transition">
-            <div class="flex items-center gap-2.5 min-w-0">
-              <span class="w-1.5 h-1.5 rounded-full bg-indigo-500 shrink-0"></span>
-              <span class="text-xs text-zinc-400 truncate font-mono">${escapeHtml(f.domain)}</span>
-            </div>
-            <button onclick="deleteFuente('${escapeHtml(f.id)}', '${escapeHtml(f.domain)}')"
-              class="opacity-0 group-hover:opacity-100 shrink-0 text-zinc-600 hover:text-red-400 transition text-xs p-1 rounded"
-              title="Eliminar">
-              <svg class="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
-                <path stroke-linecap="round" stroke-linejoin="round" d="M6 18 18 6M6 6l12 12"/>
-              </svg>
-            </button>
-          </div>`).join("");
-      }
-
-      function filterFuentesList(query) {
-        const q = query.toLowerCase();
-        _renderFuentesList(q ? _allFuentes.filter(f => f.domain.includes(q)) : _allFuentes);
-      }
-
-      async function deleteFuente(id, domain) {
-        if (!confirm(`¿Eliminar "${domain}" de las fuentes?`)) return;
-        const { error } = await db.from("fuentes_scraper").delete().eq("id", id);
-        if (!error) loadFuentesList();
-      }
-
-      // ─── Sesión ───────────────────────────────────────────────────────────
-
-      (async () => {
+    async login() {
+      this.loginLoading = true; this.loginError = '';
+      const { error } = await db.auth.signInWithPassword({ email: this.loginEmail, password: this.loginPassword });
+      if (error) {
+        this.loginError = 'Credenciales incorrectas.';
+      } else {
         const { data: { session } } = await db.auth.getSession();
-        if (session) showDashboard();
-      })();
+        this.session = session;
+        this.loadTechCloud();
+      }
+      this.loginLoading = false;
+    },
 
-      // ─── Login ────────────────────────────────────────────────────────────
+    async logout() {
+      this.logoutLoading = true;
+      await db.auth.signOut();
+      this.session = null; this.logoutLoading = false;
+    },
 
-      loginForm.addEventListener("submit", async (e) => {
-        e.preventDefault();
-        const email    = document.getElementById("loginEmail").value.trim();
-        const password = document.getElementById("loginPassword").value;
+    // ── Navigation ────────────────────────────────────────
+    go(name) {
+      this.panel = name;
+      if (name === 'fuentes')  this.loadFuentes();
+      if (name === 'miembros') this.loadMembers();
+      if (name === 'buscador') this.loadJobs();
+    },
 
-        loginBtn.disabled    = true;
-        loginBtn.textContent = "Verificando…";
-        loginError.classList.add("hidden");
+    // ── Tech cloud ────────────────────────────────────────
+    async loadTechCloud() {
+      const { data } = await db.from('search_filters').select('tech_stack');
+      if (!data?.length) return;
+      const all = data.flatMap(r => (r.tech_stack ?? '').split(',')).map(t => t.trim()).filter(Boolean);
+      const uniq = [...new Set(all.map(t => t.toLowerCase()))].map(t => all.find(o => o.toLowerCase() === t));
+      this.techCloud = uniq.sort();
+    },
 
-        const { error } = await db.auth.signInWithPassword({ email, password });
+    addTechTag(tech) {
+      const cur = this.form.tech_stack.trim();
+      const existing = cur.split(',').map(t => t.trim().toLowerCase()).filter(Boolean);
+      if (!existing.includes(tech.toLowerCase()))
+        this.form.tech_stack = cur ? `${cur}, ${tech}` : tech;
+    },
 
-        if (error) {
-          loginError.classList.remove("hidden");
-          loginError.querySelector("span").textContent = "Credenciales incorrectas. Intentá de nuevo.";
-        } else {
-          showDashboard();
-        }
+    addNewTag() {
+      const t = this.newTag.trim(); if (!t) return;
+      this.addTechTag(t);
+      if (!this.techCloud.map(x => x.toLowerCase()).includes(t.toLowerCase()))
+        this.techCloud = [...this.techCloud, t].sort();
+      this.newTag = '';
+    },
 
-        loginBtn.disabled    = false;
-        loginBtn.textContent = "Iniciar sesión";
+    // ── Submit form ───────────────────────────────────────
+    async submitForm() {
+      this.formSubmitted = true;
+      if (!this.form.job_type.length) return;
+      this.formLoading = true; this.formError = ''; this.formSuccess = '';
+      const { error } = await db.from('search_filters').insert({
+        tech_stack:    this.form.tech_stack,
+        job_type:      this.form.job_type.join(','),
+        location:      this.form.location,
+        telegram_user: this.form.telegram_user.replace(/^@/, ''),
       });
-
-      // ─── Logout ───────────────────────────────────────────────────────────
-
-      async function handleLogout() {
-        const btn = document.getElementById("logoutBtn");
-        btn.disabled    = true;
-        btn.textContent = "Cerrando…";
-        await db.auth.signOut();
-        showLogin();
-        btn.disabled    = false;
-        btn.textContent = "Cerrar sesión";
+      if (error) {
+        this.formError = 'No se pudo guardar.'; console.error(error);
+      } else {
+        this.formSuccess = 'Criterios guardados correctamente.';
+        this.form = { tech_stack: '', job_type: [], location: '', telegram_user: '' };
+        this.formSubmitted = false;
+        this.loadMembers();
       }
+      this.formLoading = false;
+    },
 
-      // ─── Status msg ───────────────────────────────────────────────────────
+    // ── Members ───────────────────────────────────────────
+    async loadMembers() {
+      this.membersLoading = true;
+      const { data } = await db.from('search_filters')
+        .select('id, telegram_user, tech_stack, job_type, location').order('telegram_user');
+      this.members = data || [];
+      this.membersLoading = false;
+    },
 
-      function showStatus(message, isError = false) {
-        statusMsg.innerHTML = message;
-        statusMsg.className = [
-          "mt-5 text-sm text-center rounded-lg px-4 py-3 font-medium",
-          isError
-            ? "bg-red-950/60 text-red-300 border border-red-900/60"
-            : "bg-emerald-950/60 text-emerald-300 border border-emerald-900/60",
-        ].join(" ");
-        statusMsg.classList.remove("hidden");
-      }
+    async deleteMember(id, user) {
+      if (!confirm(`¿Eliminar @${user}?`)) return;
+      await db.from('search_filters').delete().eq('id', id);
+      this.loadMembers();
+    },
 
-      // ─── Tech cloud ───────────────────────────────────────────────────────
+    openEdit(row) {
+      this.editRow = row;
+      this.editTech = row.tech_stack;
+      this.editLocation = row.location;
+      this.editJobType = (row.job_type ?? '').split(',').filter(Boolean);
+      this.editError = '';
+      this.editModal = true;
+    },
 
-      async function loadTechCloud() {
-        const { data, error } = await db.from("search_filters").select("tech_stack");
-        if (error || !data?.length) return;
+    closeEdit() { this.editModal = false; },
 
-        const allTechs = data
-          .flatMap(row => (row.tech_stack ?? "").split(","))
-          .map(t => t.trim()).filter(Boolean);
-        const unique = [...new Set(allTechs.map(t => t.toLowerCase()))]
-          .map(t => allTechs.find(o => o.toLowerCase() === t));
+    async saveEdit() {
+      if (!this.editJobType.length) { this.editError = 'Seleccioná al menos una modalidad.'; return; }
+      this.editLoading = true;
+      const { error } = await db.from('search_filters')
+        .update({ tech_stack: this.editTech, job_type: this.editJobType.join(','), location: this.editLocation })
+        .eq('id', this.editRow.id);
+      this.editLoading = false;
+      if (error) { this.editError = error.message; return; }
+      this.closeEdit(); this.loadMembers();
+    },
 
-        if (!unique.length) return;
+    techsOf(m) { return (m.tech_stack ?? '').split(',').map(t => t.trim()).filter(Boolean); },
+    jobTypeLabel(jt) {
+      const map = { remote: 'Remoto', hybrid: 'Híbrido', 'on-site': 'Presencial' };
+      return (jt ?? '').split(',').map(t => map[t] ?? t).filter(Boolean).join(', ');
+    },
 
-        const tagsContainer = document.getElementById("techTags");
-        tagsContainer.innerHTML = "";
+    // ── Fuentes ───────────────────────────────────────────
+    async loadFuentes() {
+      this.fuentesLoading = true;
+      const { data } = await db.from('fuentes_scraper').select('id, domain').order('domain');
+      this.fuentes = data || [];
+      this.fuentesLoading = false;
+    },
 
-        for (const tech of unique.sort()) {
-          const btn = document.createElement("button");
-          btn.type = "button";
-          btn.textContent = tech;
-          btn.className = "px-2.5 py-1 rounded-full text-xs bg-zinc-800 border border-zinc-700 text-zinc-400 hover:bg-indigo-600/30 hover:text-indigo-300 hover:border-indigo-700 transition";
-          btn.onclick = () => addTechTag(tech);
-          tagsContainer.appendChild(btn);
-        }
+    async deleteFuente(id, domain) {
+      if (!confirm(`¿Eliminar "${domain}"?`)) return;
+      await db.from('fuentes_scraper').delete().eq('id', id);
+      this.loadFuentes();
+    },
 
-        document.getElementById("techCloud").classList.remove("hidden");
-      }
-
-      function setLocation(value) {
-        document.getElementById("location").value = value;
-        document.querySelectorAll(".location-tag").forEach(btn => {
-          const isMatch = btn.textContent.trim() === value;
-          btn.classList.toggle("bg-indigo-600/30",    isMatch);
-          btn.classList.toggle("text-indigo-300",     isMatch);
-          btn.classList.toggle("border-indigo-700",   isMatch);
-          btn.classList.toggle("bg-zinc-800",        !isMatch);
-          btn.classList.toggle("text-zinc-400",      !isMatch);
-          btn.classList.toggle("border-zinc-700",    !isMatch);
-        });
-      }
-
-      function addTechTag(tech) {
-        const input = document.getElementById("tech_stack");
-        const current  = input.value.trim();
-        const existing = current.split(",").map(t => t.trim().toLowerCase()).filter(Boolean);
-        if (!existing.includes(tech.toLowerCase())) {
-          input.value = current ? `${current}, ${tech}` : tech;
-        }
-        input.focus();
-      }
-
-      function addNewTag() {
-        const newTagInput = document.getElementById("newTagInput");
-        const tech = newTagInput.value.trim();
-        if (!tech) return;
-
-        addTechTag(tech);
-
-        const tagsContainer = document.getElementById("techTags");
-        const existing = [...tagsContainer.querySelectorAll("button")].map(b => b.textContent.toLowerCase());
-
-        if (!existing.includes(tech.toLowerCase())) {
-          const btn = document.createElement("button");
-          btn.type = "button";
-          btn.textContent = tech;
-          btn.className = "px-2.5 py-1 rounded-full text-xs bg-indigo-900/50 border border-indigo-700/60 text-indigo-300 hover:bg-indigo-600/30 transition";
-          btn.onclick = () => addTechTag(tech);
-          tagsContainer.appendChild(btn);
-        }
-
-        newTagInput.value = "";
-        newTagInput.focus();
-      }
-
-      document.getElementById("newTagInput")?.addEventListener("keydown", (e) => {
-        if (e.key === "Enter") { e.preventDefault(); addNewTag(); }
-      });
-
-      // ─── Tabla de miembros ────────────────────────────────────────────────
-
-      const JOB_TYPE_LABELS = { remote: "Remoto", hybrid: "Híbrido", "on-site": "Presencial" };
-
-      async function loadMembersTable() {
-        const tbody   = document.getElementById("membersTableBody");
-        const empty   = document.getElementById("membersEmpty");
-        const loading = document.getElementById("membersLoading");
-        const countEl = document.getElementById("membersCount");
-
-        tbody.innerHTML = "";
-        loading.classList.remove("hidden");
-        empty.classList.add("hidden");
-
-        const { data, error } = await db.from("search_filters")
-          .select("id, telegram_user, tech_stack, job_type, location")
-          .order("telegram_user");
-
-        loading.classList.add("hidden");
-
-        if (error || !data?.length) {
-          empty.classList.remove("hidden");
-          countEl.textContent = "0 miembros";
-          return;
-        }
-
-        countEl.textContent = `${data.length} miembro${data.length !== 1 ? "s" : ""}`;
-
-        for (const row of data) {
-          const tr = document.createElement("tr");
-          tr.className = "hover:bg-zinc-900/40 transition";
-          const modalidadLabel = escapeHtml((row.job_type ?? "").split(",").map(t => JOB_TYPE_LABELS[t] ?? t).join(", "));
-          const techs = (row.tech_stack ?? "").split(",").map(t => t.trim()).filter(Boolean);
-          const techHtml = techs.map(t =>
-            `<span class="inline-flex px-1.5 py-0.5 rounded text-[10px] bg-zinc-800 border border-zinc-700/60 text-zinc-400">${escapeHtml(t)}</span>`
-          ).join(" ");
-
-          tr.innerHTML = `
-            <td class="px-4 py-3 font-mono text-indigo-400 text-sm">@${escapeHtml(row.telegram_user)}</td>
-            <td class="px-4 py-3"><div class="flex flex-wrap gap-1">${techHtml || '<span class="text-zinc-600 text-xs">—</span>'}</div></td>
-            <td class="px-4 py-3 text-xs text-zinc-500">${modalidadLabel}</td>
-            <td class="px-4 py-3 text-xs text-zinc-500">${escapeHtml(row.location)}</td>
-            <td class="px-4 py-3">
-              <div class="flex items-center justify-end gap-1.5">
-                <button onclick='openEditModal(${JSON.stringify(row)})'
-                  class="text-xs text-zinc-400 hover:text-white hover:bg-zinc-700 border border-zinc-700
-                         px-2.5 py-1 rounded-md transition">
-                  Editar
-                </button>
-                <button onclick='deleteMember("${escapeHtml(row.id)}", "${escapeHtml(row.telegram_user)}")'
-                  class="text-xs text-zinc-600 hover:text-red-400 hover:bg-red-950/40 border border-zinc-800
-                         hover:border-red-900/60 px-2.5 py-1 rounded-md transition">
-                  Eliminar
-                </button>
-              </div>
-            </td>
-          `;
-          tbody.appendChild(tr);
-        }
-      }
-
-      async function deleteMember(id, user) {
-        if (!confirm(`¿Eliminar los criterios de @${user}?`)) return;
-        const { error } = await db.from("search_filters").delete().eq("id", id);
-        if (!error) loadMembersTable();
-      }
-
-      // ─── Modal edición ────────────────────────────────────────────────────
-
-      function openEditModal(row) {
-        document.getElementById("editId").value       = row.id;
-        document.getElementById("editTech").value     = row.tech_stack;
-        document.getElementById("editLocation").value = row.location;
-        document.getElementById("editError").classList.add("hidden");
-
-        const selected = (row.job_type ?? "").split(",");
-        document.querySelectorAll(".edit-job-type").forEach(cb => {
-          cb.checked = selected.includes(cb.value);
-        });
-
-        document.getElementById("editModal").classList.remove("hidden");
-      }
-
-      function closeEditModal() {
-        document.getElementById("editModal").classList.add("hidden");
-      }
-
-      async function saveEdit() {
-        const id       = document.getElementById("editId").value;
-        const tech     = document.getElementById("editTech").value.trim();
-        const location = document.getElementById("editLocation").value.trim();
-        const types    = [...document.querySelectorAll(".edit-job-type:checked")].map(cb => cb.value);
-
-        if (types.length === 0) {
-          document.getElementById("editError").classList.remove("hidden");
-          return;
-        }
-        document.getElementById("editError").classList.add("hidden");
-
-        const btn = document.getElementById("editSaveBtn");
-        btn.disabled    = true;
-        btn.textContent = "Guardando…";
-
-        const { error } = await db.from("search_filters")
-          .update({ tech_stack: tech, job_type: types.join(","), location })
-          .eq("id", id);
-
-        btn.disabled    = false;
-        btn.textContent = "Guardar";
-
-        if (error) {
-          document.getElementById("editError").textContent = "Error al guardar: " + error.message;
-          document.getElementById("editError").classList.remove("hidden");
-        } else {
-          closeEditModal();
-          loadMembersTable();
-        }
-      }
-
-      document.getElementById("editModal").addEventListener("click", (e) => {
-        if (e.target === document.getElementById("editModal")) closeEditModal();
-      });
-
-      // ─── Buscador ─────────────────────────────────────────────────────────
-
-      let localJobsCache    = [];
-      let _activeTimeFilter = 0;
-      let _activeModeFilter = "all";
-      let _soloExclusivas   = false;
-      const COMMUNITY_SEARCH_API_URL = "http://127.0.0.1:8765/search";
-
-      async function fetchLiveJobs() {
-        const skeleton  = document.getElementById("jobsSkeleton");
-        const container = document.getElementById("jobResultsContainer");
-
-        // Mostrar skeleton, ocultar resultados previos
-        if (skeleton) skeleton.classList.remove("hidden");
-
-        // Resetear filtros
-        document.getElementById("jobSearchInput").value     = "";
-        document.getElementById("jobLocationInput").value   = "";
-        document.getElementById("jobSeniorityFilter").value = "";
-        document.getElementById("jobTimeFilter").value      = "0";
-        _activeTimeFilter = 0;
-        _activeModeFilter = "all";
-        _soloExclusivas   = false;
-        _updateModeFilterUI("all");
-        _updateExclusivas(false);
-
+    extractDomains(raws) {
+      const seen = new Set(), domains = [];
+      for (const raw of raws) {
+        const s = String(raw ?? '').trim(); if (!s) continue;
         try {
-          const { data, error } = await db
-            .from("sent_jobs")
-            .select("title, company, job_url, sent_at, not_on_linkedin")
-            .order("sent_at", { ascending: false });
-
-          if (error) throw error;
-
-          localJobsCache = data || [];
-          _updateStatsBar(localJobsCache);
-          _renderJobList(localJobsCache);
-        } catch (e) {
-          if (skeleton) skeleton.classList.add("hidden");
-          container.innerHTML = `
-            <div class="py-16 text-center">
-              <div class="inline-flex items-center justify-center w-12 h-12 rounded-2xl bg-red-950/60 border border-red-900/40 mb-4">
-                <svg class="w-6 h-6 text-red-400" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.5">
-                  <path stroke-linecap="round" stroke-linejoin="round" d="M12 9v4m0 4h.01M21 12A9 9 0 1 1 3 12a9 9 0 0 1 18 0z"/>
-                </svg>
-              </div>
-              <p class="text-sm text-red-400">Error al cargar: ${escapeHtml(e.message)}</p>
-            </div>`;
+          const url = s.startsWith('http') ? s : `https://${s}`;
+          const h = new URL(url).hostname.replace(/^www\./, '');
+          if (h && !seen.has(h)) { seen.add(h); domains.push(h); }
+        } catch {
+          const c = s.replace(/^www\./, '').split('/')[0].toLowerCase();
+          if (c && !seen.has(c)) { seen.add(c); domains.push(c); }
         }
       }
+      return domains;
+    },
 
-      function _updateStatsBar(jobs) {
-        const countEl  = document.getElementById("jobResultsCount");
-        const newEl    = document.getElementById("jobNewCount");
-        const newValEl = document.getElementById("jobNewCountVal");
-        const weekCutoff = Date.now() - 7 * 86_400_000;
-        const newCount   = jobs.filter(j => new Date(j.sent_at).getTime() >= weekCutoff).length;
-        if (countEl)  countEl.textContent = `${jobs.length.toLocaleString("es-AR")} ofertas`;
-        if (newValEl) newValEl.textContent = newCount.toLocaleString("es-AR");
-        if (newEl)    newEl.classList.toggle("hidden", newCount === 0);
-      }
+    processUrls() {
+      const lines = this.manualUrls.split('\n').map(l => l.trim()).filter(Boolean);
+      this.parsedDomains = this.extractDomains(lines);
+      this.validationDone = false; this.alreadyDomains = []; this.newDomains = [];
+      this.selectedDomains = []; this.saveDomainsOk = false; this.saveDomainsErr = '';
+    },
 
-      function _updateModeFilterUI(mode) {
-        document.querySelectorAll(".mode-pill").forEach(btn => {
-          const active = btn.id === `modeBtn-${mode}`;
-          btn.classList.toggle("active", active);
-        });
-      }
+    async handleFile(e) {
+      const file = e.target.files?.[0]; if (!file) return;
+      try {
+        const buf = await file.arrayBuffer();
+        const wb  = XLSX.read(buf, { type: 'array' });
+        const sh  = wb.Sheets[wb.SheetNames[0]];
+        const rows = XLSX.utils.sheet_to_json(sh, { header: 1 });
+        this.parsedDomains = this.extractDomains(rows.map(r => r[0]).filter(Boolean));
+        this.validationDone = false; this.alreadyDomains = []; this.newDomains = [];
+        this.selectedDomains = []; this.saveDomainsOk = false; this.saveDomainsErr = '';
+      } catch { alert('No se pudo leer el archivo.'); }
+    },
 
-      function _updateExclusivas(active) {
-        const icon  = document.getElementById("exclusivasIcon");
-        const btn   = document.getElementById("exclusivasToggle");
-        const label = document.getElementById("exclusivasLabel");
-        if (!icon) return;
-        icon.classList.toggle("on", active);
-        btn.classList.toggle("text-indigo-300",  active);
-        btn.classList.toggle("text-zinc-500",   !active);
-      }
+    async validateDomains() {
+      const { data } = await db.from('fuentes_scraper').select('domain');
+      const existSet = new Set((data || []).map(r => r.domain.toLowerCase()));
+      this.alreadyDomains = this.parsedDomains.filter(d => existSet.has(d.toLowerCase()));
+      this.newDomains = this.parsedDomains.filter(d => !existSet.has(d.toLowerCase()));
+      this.selectedDomains = [...this.newDomains];
+      this.validationDone = true;
+    },
 
-      function _toggleExclusivas() {
-        _soloExclusivas = !_soloExclusivas;
-        _updateExclusivas(_soloExclusivas);
-        _filterJobs();
-      }
+    async saveDomains() {
+      if (!this.selectedDomains.length) return;
+      this.savingDomains = true; this.saveDomainsErr = '';
+      const { error } = await db.from('fuentes_scraper')
+        .upsert(this.selectedDomains.map(d => ({ domain: d })), { onConflict: 'domain' });
+      this.savingDomains = false;
+      if (error) { this.saveDomainsErr = error.message; return; }
+      this.saveDomainsOk = true;
+      this.newDomains = []; this.selectedDomains = [];
+      this.parsedDomains = []; this.manualUrls = '';
+      this.validationDone = false;
+      this.loadFuentes();
+    },
 
-      function _setTimeFilterFromSelect(val) {
-        _activeTimeFilter = Number(val);
-        _filterJobs();
-      }
+    // ── Jobs ──────────────────────────────────────────────
+    async loadJobs() {
+      this.jobsLoading = true; this.jobs = []; this.displayLimit = 100;
+      this.jobSearch = ''; this.jobLocation = ''; this.jobSeniority = '';
+      this.jobTime = 0; this.jobMode = 'all'; this.soloExclusivas = false;
+      this.communityStatus = '';
+      const { data } = await db.from('sent_jobs')
+        .select('title, company, job_url, sent_at, not_on_linkedin')
+        .order('sent_at', { ascending: false });
+      this.jobs = data || [];
+      this.jobsLoading = false;
+    },
 
-      function _setModeFilter(mode) {
-        _activeModeFilter = mode;
-        _updateModeFilterUI(mode);
-        _filterJobs();
-      }
-
-      function _setCommunityStatus(message, tone = "muted") {
-        const el = document.getElementById("communitySearchStatus");
-        if (!el) return;
-        el.textContent = message;
-        el.className = "text-[11px] " + (
-          tone === "error" ? "text-red-400" :
-          tone === "ok"    ? "text-emerald-400" :
-          "text-zinc-600"
-        );
-      }
-
-      function _mergeCommunityJobs(jobs) {
-        const byUrl = new Map(localJobsCache.map(job => [job.job_url, job]));
-        for (const job of jobs) {
+    async scrapeCommunity() {
+      this.scrapingCommunity = true; this.communityStatus = '';
+      try {
+        const p = new URLSearchParams({ q: this.jobSearch, location: this.jobLocation, source: this.communitySource, limit: '120' });
+        const res = await fetch(`http://127.0.0.1:8765/search?${p}`);
+        const pl  = await res.json();
+        if (!res.ok || !pl.ok) throw new Error(pl.error || `HTTP ${res.status}`);
+        const byUrl = new Map(this.jobs.map(j => [j.job_url, j]));
+        for (const job of pl.jobs || []) {
           if (!job?.job_url) continue;
-          byUrl.set(job.job_url, {
-            ...job,
-            sent_at: job.sent_at || new Date().toISOString(),
-            not_on_linkedin: job.not_on_linkedin !== false,
-          });
+          byUrl.set(job.job_url, { ...job, sent_at: job.sent_at || new Date().toISOString(), not_on_linkedin: job.not_on_linkedin !== false });
         }
-        localJobsCache = Array.from(byUrl.values()).sort((a, b) => new Date(b.sent_at) - new Date(a.sent_at));
+        this.jobs = Array.from(byUrl.values()).sort((a, b) => new Date(b.sent_at) - new Date(a.sent_at));
+        this.communityStatus = `${pl.count || 0} encontradas`; this.communityStatusType = 'ok';
+      } catch(e) {
+        this.communityStatus = 'API local apagada'; this.communityStatusType = 'error';
       }
-
-      async function scrapeCommunitySources() {
-        const btn    = document.getElementById("communitySearchBtn");
-        const source = document.getElementById("communitySourceSelect")?.value || "all";
-        const query  = document.getElementById("jobSearchInput")?.value?.trim() || "";
-        const location = document.getElementById("jobLocationInput")?.value || "";
-
-        btn.disabled = true;
-        _setCommunityStatus("Scrapeando…", "muted");
-
-        try {
-          const params = new URLSearchParams({ q: query, location, source, limit: "120" });
-          const res     = await fetch(`${COMMUNITY_SEARCH_API_URL}?${params.toString()}`);
-          const payload = await res.json();
-          if (!res.ok || !payload.ok) throw new Error(payload.error || `HTTP ${res.status}`);
-
-          _mergeCommunityJobs(payload.jobs || []);
-          _filterJobs();
-          _setCommunityStatus(`${payload.count || 0} encontradas`, "ok");
-        } catch (e) {
-          _setCommunityStatus("API local apagada", "error");
-          console.error("Error al scrapear fuentes comunitarias", e);
-        } finally {
-          btn.disabled = false;
-        }
-      }
-
-      function _filterJobs() {
-        const q        = (document.getElementById("jobSearchInput")?.value    ?? "").trim().toLowerCase();
-        const locQ     = (document.getElementById("jobLocationInput")?.value  ?? "").trim().toLowerCase();
-        const seniority= (document.getElementById("jobSeniorityFilter")?.value ?? "").toLowerCase();
-
-        let filtered = localJobsCache;
-
-        if (_activeTimeFilter > 0) {
-          const cutoff = Date.now() - _activeTimeFilter * 3_600_000;
-          filtered = filtered.filter(j => new Date(j.sent_at).getTime() >= cutoff);
-        }
-
-        if (q) {
-          filtered = filtered.filter(j =>
-            (j.title   ?? "").toLowerCase().includes(q) ||
-            (j.company ?? "").toLowerCase().includes(q) ||
-            (j.job_url ?? "").toLowerCase().includes(q)
-          );
-        }
-
-        if (locQ) {
-          filtered = filtered.filter(j =>
-            (j.title   ?? "").toLowerCase().includes(locQ) ||
-            (j.company ?? "").toLowerCase().includes(locQ) ||
-            (j.job_url ?? "").toLowerCase().includes(locQ)
-          );
-        }
-
-        if (_activeModeFilter === "remote") {
-          filtered = filtered.filter(j =>
-            /\b(remote|remoto|anywhere|distributed|worldwide)\b/i.test((j.title ?? "") + " " + (j.job_url ?? ""))
-          );
-        } else if (_activeModeFilter === "hybrid") {
-          filtered = filtered.filter(j => /\b(h[íi]brido|hybrid)\b/i.test(j.title ?? ""));
-        }
-
-        if (seniority) {
-          const seniorityMap = {
-            junior: /\b(junior|jr\.?|entry[\s-]level|intern|trainee|aprendiz|pasante)\b/i,
-            mid:    /\b(mid[\s-]?level|semi[\s-]?senior|ssr|pleno|middle)\b/i,
-            senior: /\b(senior|sr\.?)\b/i,
-            lead:   /\b(lead|staff|principal|architect|director|head of|manager|vp|chief)\b/i,
-          };
-          const re = seniorityMap[seniority];
-          if (re) filtered = filtered.filter(j => re.test(j.title ?? ""));
-        }
-
-        if (_soloExclusivas) {
-          filtered = filtered.filter(j => j.not_on_linkedin === true);
-        }
-
-        _renderJobList(filtered);
-      }
-
-      function _relativeTime(dateStr) {
-        const diff  = Math.max(0, Date.now() - new Date(dateStr).getTime());
-        const mins  = Math.floor(diff / 60_000);
-        const hours = Math.floor(diff / 3_600_000);
-        const days  = Math.floor(diff / 86_400_000);
-        if (mins  < 1)  return { text: "Ahora",        hot: true  };
-        if (mins  < 60) return { text: `${mins}m`,      hot: true  };
-        if (hours < 6)  return { text: `${hours}h`,     hot: true  };
-        if (hours < 24) return { text: `${hours}h`,     hot: false };
-        if (days  < 7)  return { text: `${days}d`,      hot: false };
-        return {
-          text: new Date(dateStr).toLocaleDateString("es-AR", { day: "numeric", month: "short" }),
-          hot: false,
-        };
-      }
-
-      function _inferLocation(job) {
-        const text = ((job.title ?? '') + ' ' + (job.company ?? '')).toLowerCase();
-        if (/\b(remote|remoto|anywhere|distributed|worldwide)\b/.test(text))
-          return { label: 'Remote',  cls: 'badge text-emerald-400 border-emerald-900/60 bg-emerald-950/40' };
-        if (/\b(latam|latin\s*america|argentina|uruguay|chile|colombia|brasil|brazil|m[eé]xico|peru)\b/.test(text))
-          return { label: 'LATAM',   cls: 'badge text-sky-400 border-sky-900/60 bg-sky-950/40' };
-        try {
-          const host = new URL(job.job_url ?? '').hostname;
-          if (host.includes('greenhouse'))      return { label: 'Greenhouse',    cls: 'badge text-zinc-500 border-zinc-800 bg-zinc-900/60' };
-          if (host.includes('lever'))           return { label: 'Lever',         cls: 'badge text-zinc-500 border-zinc-800 bg-zinc-900/60' };
-          if (host.includes('ashby'))           return { label: 'Ashby',         cls: 'badge text-zinc-500 border-zinc-800 bg-zinc-900/60' };
-          if (host.includes('workable'))        return { label: 'Workable',      cls: 'badge text-zinc-500 border-zinc-800 bg-zinc-900/60' };
-          if (host.includes('smartrecruiters')) return { label: 'SmartRecruit',  cls: 'badge text-zinc-500 border-zinc-800 bg-zinc-900/60' };
-          if (host.includes('bamboohr'))        return { label: 'BambooHR',      cls: 'badge text-zinc-500 border-zinc-800 bg-zinc-900/60' };
-          if (host.includes('remoteok'))        return { label: 'RemoteOK',      cls: 'badge text-zinc-500 border-zinc-800 bg-zinc-900/60' };
-          if (host.includes('remotive'))        return { label: 'Remotive',      cls: 'badge text-zinc-500 border-zinc-800 bg-zinc-900/60' };
-          if (host.includes('breezy'))          return { label: 'Breezy',        cls: 'badge text-zinc-500 border-zinc-800 bg-zinc-900/60' };
-          if (host.includes('recruitee'))       return { label: 'Recruitee',     cls: 'badge text-zinc-500 border-zinc-800 bg-zinc-900/60' };
-        } catch {}
-        return null;
-      }
-
-      function _inferSeniority(title) {
-        const t = (title ?? "").toLowerCase();
-        if (/\b(lead|staff|principal|architect|director|head of|manager|vp|chief)\b/.test(t))
-          return { label: "Lead",   cls: "badge text-red-400 border-red-900/50 bg-red-950/40" };
-        if (/\b(senior|sr\.?)\b/.test(t))
-          return { label: "Senior", cls: "badge text-orange-400 border-orange-900/50 bg-orange-950/40" };
-        if (/\b(mid[\s-]?level|semi[\s-]?senior|ssr|pleno|middle)\b/.test(t))
-          return { label: "Mid",    cls: "badge text-yellow-400 border-yellow-900/50 bg-yellow-950/40" };
-        if (/\b(junior|jr\.?|entry[\s-]level|intern|trainee|aprendiz|pasante)\b/.test(t))
-          return { label: "Junior", cls: "badge text-green-400 border-green-900/50 bg-green-950/40" };
-        return null;
-      }
-
-      function _renderJobList(jobs) {
-        const container = document.getElementById("jobResultsContainer");
-        const skeleton  = document.getElementById("jobsSkeleton");
-        if (skeleton) skeleton.classList.add("hidden");
-
-        if (!jobs.length) {
-          container.innerHTML = `
-            <div class="py-20 text-center">
-              <div class="inline-flex items-center justify-center w-14 h-14 rounded-2xl bg-zinc-900 border border-zinc-800 mb-4">
-                <svg class="w-7 h-7 text-zinc-600" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.5">
-                  <path stroke-linecap="round" stroke-linejoin="round" d="m21 21-5.197-5.197m0 0A7.5 7.5 0 1 0 5.196 5.196a7.5 7.5 0 0 0 10.607 10.607Z"/>
-                </svg>
-              </div>
-              <p class="text-sm text-zinc-500">Sin resultados con esos filtros</p>
-              <p class="text-xs text-zinc-700 mt-1">Ajustá los criterios o borrá los filtros activos</p>
-            </div>`;
-          return;
-        }
-
-        // Quitar el skeleton del innerHTML para no perderlo al re-renderizar
-        const skeletonEl = document.getElementById("jobsSkeleton");
-        container.innerHTML = "";
-        if (skeletonEl) { skeletonEl.classList.add("hidden"); container.appendChild(skeletonEl); }
-
-        const fragment = document.createDocumentFragment();
-
-        for (const job of jobs) {
-          const loc                    = _inferLocation(job);
-          const seniority              = _inferSeniority(job.title);
-          const { text: timeText, hot } = _relativeTime(job.sent_at);
-
-          const locBadge = loc
-            ? `<span class="${loc.cls}">${escapeHtml(loc.label)}</span>` : "";
-          const senBadge = seniority
-            ? `<span class="${seniority.cls}">${seniority.label}</span>` : "";
-          const exclusivaBadge = job.not_on_linkedin === true
-            ? `<span class="badge text-violet-300 border-violet-900/60 bg-violet-950/50">Exclusiva</span>` : "";
-
-          let faviconHtml = `<div class="w-9 h-9 rounded-lg shrink-0 bg-zinc-800 border border-zinc-700/50 flex items-center justify-center text-zinc-500 text-[13px] font-bold select-none">${escapeHtml((job.company ?? "?")[0].toUpperCase())}</div>`;
-          try {
-            const host = new URL(job.job_url ?? "").hostname;
-            faviconHtml = `<img src="https://www.google.com/s2/favicons?sz=32&domain=${encodeURIComponent(host)}" alt="" loading="lazy" class="w-9 h-9 rounded-lg shrink-0 bg-zinc-800 border border-zinc-700/50 object-contain" onerror="this.outerHTML='<div class=\\"w-9 h-9 rounded-lg shrink-0 bg-zinc-800 border border-zinc-700/50 flex items-center justify-center text-zinc-500 text-[13px] font-bold select-none\\">${escapeHtml((job.company ?? "?")[0].toUpperCase())}</div>'"/>`;
-          } catch {}
-
-          const a = document.createElement("a");
-          a.href   = escapeHtml(job.job_url ?? "#");
-          a.target = "_blank";
-          a.rel    = "noopener noreferrer";
-          a.className = "job-card flex items-start gap-3 px-5 py-4 border-b border-zinc-800/40 cursor-pointer block";
-          a.innerHTML = `
-            ${faviconHtml}
-            <div class="flex-1 min-w-0">
-              <div class="flex items-start gap-1.5 flex-wrap">
-                <span class="job-title text-[13px] font-semibold text-zinc-100 transition-colors leading-snug">
-                  ${escapeHtml(job.title ?? "")}
-                </span>
-                ${exclusivaBadge}
-              </div>
-              <div class="flex items-center gap-1.5 mt-1.5 flex-wrap">
-                ${job.company ? `<span class="text-xs text-zinc-500 font-medium">${escapeHtml(job.company)}</span>` : ""}
-                ${locBadge || senBadge ? `<span class="text-zinc-700 text-[10px]">·</span>` : ""}
-                ${locBadge}
-                ${locBadge && senBadge ? `<span class="text-zinc-700 text-[10px]">·</span>` : ""}
-                ${senBadge}
-              </div>
-            </div>
-            <div class="shrink-0 flex flex-col items-end gap-1 pt-0.5">
-              <span class="text-[11px] font-mono tabular-nums whitespace-nowrap ${hot ? "text-orange-400" : "text-zinc-600"}">
-                ${hot ? "🔥 " : ""}${escapeHtml(timeText)}
-              </span>
-            </div>`;
-
-          fragment.appendChild(a);
-        }
-
-        container.appendChild(fragment);
-        _updateStatsBar(localJobsCache);
-
-        // Actualizar counter con resultados filtrados
-        document.getElementById("jobResultsCount").textContent =
-          `${jobs.length.toLocaleString("es-AR")} de ${localJobsCache.length.toLocaleString("es-AR")} ofertas`;
-      }
-
-      // ─── Expandir fuentes ─────────────────────────────────────────────────
-
-      function toggleExpandirFuentes() {
-        const body    = document.getElementById("expandirFuentesBody");
-        const chevron = document.getElementById("expandirChevron");
-        const open    = !body.classList.contains("hidden");
-        body.classList.toggle("hidden", open);
-        chevron.style.transform = open ? "" : "rotate(180deg)";
-      }
-
-      function _extractDomains(rawValues) {
-        const seen = new Set();
-        const domains = [];
-        for (const raw of rawValues) {
-          const str = String(raw ?? "").trim();
-          if (!str) continue;
-          try {
-            const url      = str.startsWith("http") ? str : `https://${str}`;
-            const hostname = new URL(url).hostname.replace(/^www\./, "");
-            if (hostname && !seen.has(hostname)) { seen.add(hostname); domains.push(hostname); }
-          } catch {
-            const clean = str.replace(/^www\./, "").split("/")[0].toLowerCase();
-            if (clean && !seen.has(clean)) { seen.add(clean); domains.push(clean); }
-          }
-        }
-        return domains;
-      }
-
-      function _renderDomainTags(domains) {
-        const tagsEl  = document.getElementById("sourcesTags");
-        const countEl = document.getElementById("sourcesCount");
-        const section = document.getElementById("sourcesResult");
-
-        window._lastParsedDomains = domains;
-        tagsEl.innerHTML = "";
-        countEl.textContent = `(${domains.length})`;
-
-        for (const domain of domains) {
-          const tag = document.createElement("span");
-          tag.textContent = domain;
-          tag.className = "px-2.5 py-1 rounded-full text-xs bg-zinc-800 border border-zinc-700 text-zinc-400 select-all font-mono";
-          tagsEl.appendChild(tag);
-        }
-
-        document.getElementById("validationPanel").classList.add("hidden");
-        document.getElementById("sourcesSuccessAlert").classList.add("hidden");
-        section.classList.remove("hidden");
-      }
-
-      async function handleSourceUpload(event) {
-        const file = event.target.files?.[0];
-        if (!file) return;
-        try {
-          const buffer   = await file.arrayBuffer();
-          const workbook = XLSX.read(buffer, { type: "array" });
-          const sheet    = workbook.Sheets[workbook.SheetNames[0]];
-          const rows     = XLSX.utils.sheet_to_json(sheet, { header: 1 });
-          const rawValues = rows.map(row => row[0]).filter(Boolean);
-          _renderDomainTags(_extractDomains(rawValues));
-        } catch (err) {
-          console.error("[trovilo] Error al parsear archivo:", err);
-          alert("No se pudo leer el archivo. Asegurate de que sea un CSV o Excel válido.");
-        }
-      }
-
-      function handleManualUrls() {
-        const textarea = document.getElementById("manualUrls");
-        const lines = textarea.value.split("\n").map(l => l.trim()).filter(Boolean);
-        if (!lines.length) return;
-        _renderDomainTags(_extractDomains(lines));
-      }
-
-      function processManualSources() { handleManualUrls(); }
-
-      // ─── Validar dominios ─────────────────────────────────────────────────
-
-      async function validateDomainsAgainstSystem(parsedDomains) {
-        if (!parsedDomains?.length) return;
-
-        const panel = document.getElementById("validationPanel");
-        panel.classList.remove("hidden");
-
-        let existingDomains = [];
-        try {
-          const { data, error } = await db.from("fuentes_scraper").select("domain");
-          if (!error && data) existingDomains = data.map(r => r.domain.toLowerCase());
-        } catch (e) {
-          console.warn("[trovilo] No se pudo leer fuentes_scraper:", e);
-        }
-
-        const existingSet = new Set(existingDomains);
-        const already = parsedDomains.filter(d => existingSet.has(d.toLowerCase()));
-        const newOnes  = parsedDomains.filter(d => !existingSet.has(d.toLowerCase()));
-
-        const alreadySection = document.getElementById("alreadyInSystem");
-        const alreadyTags    = document.getElementById("alreadyTags");
-        const alreadyCount   = document.getElementById("alreadyCount");
-
-        if (already.length) {
-          alreadyTags.innerHTML = "";
-          alreadyCount.textContent = `(${already.length})`;
-          for (const d of already) {
-            const tag = document.createElement("span");
-            tag.textContent = d;
-            tag.className = "px-2.5 py-1 rounded-full text-xs bg-emerald-950/40 border border-emerald-800/50 text-emerald-400 font-mono";
-            alreadyTags.appendChild(tag);
-          }
-          alreadySection.classList.remove("hidden");
-        } else {
-          alreadySection.classList.add("hidden");
-        }
-
-        const newSection = document.getElementById("newDomainsSection");
-        const newBody    = document.getElementById("newDomainsTableBody");
-        const newCount   = document.getElementById("newCount");
-
-        if (newOnes.length) {
-          newBody.innerHTML = "";
-          newCount.textContent = `(${newOnes.length})`;
-          document.getElementById("selectAllNew").checked = true;
-
-          for (const domain of newOnes) {
-            const tr = document.createElement("tr");
-            tr.innerHTML = `
-              <td class="px-3 py-2">
-                <label class="flex items-center gap-2 cursor-pointer select-none">
-                  <input type="checkbox" class="new-domain-cb rounded bg-zinc-800 border-zinc-700 text-indigo-500"
-                    value="${escapeHtml(domain)}" checked />
-                  <span class="font-mono text-zinc-300">${escapeHtml(domain)}</span>
-                </label>
-              </td>`;
-            newBody.appendChild(tr);
-          }
-          newSection.classList.remove("hidden");
-        } else {
-          newSection.classList.add("hidden");
-        }
-      }
-
-      function toggleAllNewDomains(checked) {
-        document.querySelectorAll(".new-domain-cb").forEach(cb => cb.checked = checked);
-      }
-
-      async function saveSelectedDomains() {
-        const selected = [...document.querySelectorAll(".new-domain-cb:checked")]
-          .map(cb => ({ domain: cb.value }));
-
-        const msgEl = document.getElementById("saveDomainsMsg");
-        const btn   = document.getElementById("addSourcesBtn");
-
-        if (!selected.length) {
-          msgEl.textContent = "Seleccioná al menos un dominio.";
-          msgEl.className = "mt-2 text-xs text-center rounded-lg px-3 py-2 font-medium bg-red-950/60 text-red-300 border border-red-900/50";
-          msgEl.classList.remove("hidden");
-          return;
-        }
-
-        btn.disabled    = true;
-        btn.textContent = "Guardando…";
-        msgEl.classList.add("hidden");
-
-        try {
-          const { error } = await db.from("fuentes_scraper").upsert(selected, { onConflict: "domain" });
-          if (error) throw error;
-
-          document.getElementById("newDomainsSection").classList.add("hidden");
-          document.getElementById("sourcesResult").classList.add("hidden");
-          const fileInput = document.getElementById("sourceFileInput");
-          if (fileInput) fileInput.value = "";
-          window._lastParsedDomains = [];
-
-          document.getElementById("sourcesSuccessAlert").classList.remove("hidden");
-          validateDomainsAgainstSystem([]);
-          loadFuentesList();
-        } catch (e) {
-          btn.disabled    = false;
-          btn.textContent = "Agregar fuentes seleccionadas";
-          msgEl.textContent = `Error al guardar: ${e.message}`;
-          msgEl.className = "mt-2 text-xs text-center rounded-lg px-3 py-2 font-medium bg-red-950/60 text-red-300 border border-red-900/50";
-          msgEl.classList.remove("hidden");
-        }
-      }
-
-      // ─── Formulario de filtros ────────────────────────────────────────────
-
-      filterForm.addEventListener("submit", async (e) => {
-        e.preventDefault();
-
-        const selectedTypes = [...document.querySelectorAll('input[name="job_type"]:checked')]
-          .map(cb => cb.value);
-
-        const jobTypeError = document.getElementById("jobTypeError");
-        if (selectedTypes.length === 0) {
-          jobTypeError.classList.remove("hidden");
-          return;
-        }
-        jobTypeError.classList.add("hidden");
-
-        const telegramRaw = document.getElementById("telegram_user").value.trim();
-
-        const payload = {
-          tech_stack:    document.getElementById("tech_stack").value.trim(),
-          job_type:      selectedTypes.join(","),
-          location:      document.getElementById("location").value.trim(),
-          telegram_user: telegramRaw.replace(/^@/, ""),
-        };
-
-        submitBtn.disabled    = true;
-        submitBtn.textContent = "Guardando…";
-        statusMsg.classList.add("hidden");
-
-        const { error } = await db.from("search_filters").insert(payload);
-
-        if (error) {
-          console.error("[trovilo] Error al guardar:", error.message);
-          showStatus("No se pudo guardar. Revisá la consola para más detalles.", true);
-        } else {
-          showStatus(
-            `Criterios guardados correctamente.<br>
-             <a href="${TELEGRAM_CHANNEL_LINK}" target="_blank" rel="noopener"
-                class="underline hover:opacity-80 mt-1 block text-xs opacity-70 break-all">
-               Las ofertas aparecerán en el canal de Telegram →
-             </a>`
-          );
-          filterForm.reset();
-          loadMembersTable();
-        }
-
-        submitBtn.disabled    = false;
-        submitBtn.textContent = "Guardar criterios";
-      });
-
-      // ─── Utilidades ───────────────────────────────────────────────────────
-
-      function escapeHtml(str) {
-        return String(str ?? "")
-          .replace(/&/g,"&amp;").replace(/</g,"&lt;")
-          .replace(/>/g,"&gt;").replace(/"/g,"&quot;");
-      }
-    </script>
-  </body>
+      this.scrapingCommunity = false;
+    },
+
+    locOf(job) {
+      const text = `${job.title ?? ''} ${job.company ?? ''}`.toLowerCase();
+      if (/\b(remote|remoto|anywhere|distributed|worldwide)\b/.test(text)) return { label: 'Remote', cls: 'b-green' };
+      if (/\b(latam|latin\s*america|argentina|uruguay|chile|colombia|brasil|brazil|m[eé]xico|peru)\b/.test(text)) return { label: 'LATAM', cls: 'b-blue' };
+      try {
+        const host = new URL(job.job_url ?? '').hostname;
+        const ats = { greenhouse:'Greenhouse', lever:'Lever', ashby:'Ashby', workable:'Workable', smartrecruiters:'SmartRecruiters', bamboohr:'BambooHR', remoteok:'RemoteOK', remotive:'Remotive', breezy:'Breezy', recruitee:'Recruitee' };
+        for (const [k, v] of Object.entries(ats)) if (host.includes(k)) return { label: v, cls: 'b-muted' };
+      } catch {}
+      return null;
+    },
+
+    senOf(job) {
+      const t = (job.title ?? '').toLowerCase();
+      if (/\b(lead|staff|principal|architect|director|head of|manager|vp|chief)\b/.test(t)) return { label: 'Lead', cls: 'b-red' };
+      if (/\b(senior|sr\.?)\b/.test(t)) return { label: 'Senior', cls: 'b-orange' };
+      if (/\b(mid[\s-]?level|semi[\s-]?senior|ssr|pleno|middle)\b/.test(t)) return { label: 'Mid', cls: 'b-yellow' };
+      if (/\b(junior|jr\.?|entry[\s-]level|intern|trainee)\b/.test(t)) return { label: 'Junior', cls: 'b-green' };
+      return null;
+    },
+
+    timeOf(dateStr) {
+      const diff  = Math.max(0, Date.now() - new Date(dateStr).getTime());
+      const mins  = Math.floor(diff / 60_000);
+      const hours = Math.floor(diff / 3_600_000);
+      const days  = Math.floor(diff / 86_400_000);
+      if (mins  < 1)  return { text: 'ahora', hot: true };
+      if (mins  < 60) return { text: `${mins}m`, hot: true };
+      if (hours < 6)  return { text: `${hours}h`, hot: true };
+      if (hours < 24) return { text: `${hours}h`, hot: false };
+      if (days  < 7)  return { text: `${days}d`, hot: false };
+      return { text: new Date(dateStr).toLocaleDateString('es-AR', { day: 'numeric', month: 'short' }), hot: false };
+    },
+
+    faviconOf(job) {
+      try { return `https://www.google.com/s2/favicons?sz=32&domain=${new URL(job.job_url).hostname}`; }
+      catch { return null; }
+    },
+
+    initOf(job) { return (job.company ?? job.title ?? '?')[0].toUpperCase(); },
+  },
+
+  mounted() { this.init(); },
+}).mount('#app');
+</script>
+</body>
 </html>
