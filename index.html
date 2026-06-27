@@ -451,69 +451,115 @@
             </div><!-- /grid -->
           </div><!-- /panelFuentes -->
 
-          <!-- ══ PANEL: BUSCADOR — Remote Rocketship style ════════════ -->
+          <!-- ══ PANEL: BUSCADOR — estilo Remote Rocketship ════════════ -->
           <div id="panelBuscador" class="hidden flex flex-col" style="height:calc(100vh - 52px)">
 
-            <!-- ── Barra de filtros superior ──────────────────────────── -->
-            <div class="shrink-0 bg-zinc-950 border-b border-zinc-800/80 px-5 py-3">
+            <!-- ── Hero header ──────────────────────────────────────────── -->
+            <div class="shrink-0 bg-gradient-to-b from-zinc-900 to-zinc-950 border-b border-zinc-800/70 px-5 pt-7 pb-5">
+              <h2 class="text-2xl font-extrabold text-white tracking-tight leading-tight">
+                Encontrá tu próximo trabajo remoto
+              </h2>
+              <p class="mt-1 text-sm text-zinc-400">Buscá entre las ofertas detectadas por el scraper de trovilo</p>
 
-              <!-- Input de búsqueda -->
-              <div class="relative mb-2.5">
-                <svg class="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-zinc-600"
-                  fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2.5">
-                  <path stroke-linecap="round" stroke-linejoin="round"
-                    d="M21 21l-4.35-4.35M17 11A6 6 0 1 1 5 11a6 6 0 0 1 12 0z"/>
-                </svg>
-                <input
-                  id="jobSearchInput"
-                  type="search"
-                  placeholder="Filtrar por título, empresa o tecnología…"
-                  oninput="_filterJobs(this.value)"
-                  autocomplete="off"
-                  class="w-full bg-zinc-900 border border-zinc-800 rounded-lg text-[13px] text-white
-                         placeholder-zinc-600 pl-9 pr-4 py-2
-                         focus:outline-none focus:border-zinc-700 transition"
-                />
+              <!-- Fila 1: título + ubicación -->
+              <div class="mt-4 grid grid-cols-1 sm:grid-cols-2 gap-2">
+                <div class="relative">
+                  <span class="absolute left-3 top-1/2 -translate-y-1/2 text-zinc-500 text-sm select-none">💼</span>
+                  <input
+                    id="jobSearchInput"
+                    type="search"
+                    placeholder="Título del puesto"
+                    oninput="_filterJobs()"
+                    autocomplete="off"
+                    class="w-full bg-zinc-900 border border-zinc-700 rounded-lg text-[13px] text-white
+                           placeholder-zinc-500 pl-9 pr-4 py-2.5
+                           focus:outline-none focus:border-indigo-500 transition"
+                  />
+                </div>
+                <div class="relative">
+                  <span class="absolute left-3 top-1/2 -translate-y-1/2 text-zinc-500 text-sm select-none">🌍</span>
+                  <input
+                    id="jobLocationInput"
+                    type="text"
+                    placeholder="Ubicación (ej. Remote, Argentina)"
+                    oninput="_filterJobs()"
+                    autocomplete="off"
+                    class="w-full bg-zinc-900 border border-zinc-700 rounded-lg text-[13px] text-white
+                           placeholder-zinc-500 pl-9 pr-4 py-2.5
+                           focus:outline-none focus:border-indigo-500 transition"
+                  />
+                </div>
               </div>
 
-              <!-- Pills de tiempo + contador -->
-              <div class="flex items-center gap-1.5">
-                <button id="timeBtn-0"  onclick="_setTimeFilter(0)"
-                  class="time-filter-btn px-2.5 py-0.5 rounded-full text-[11px] border font-medium transition
-                         bg-zinc-700 text-zinc-200 border-zinc-600">
-                  Todas
-                </button>
-                <button id="timeBtn-24" onclick="_setTimeFilter(24)"
-                  class="time-filter-btn px-2.5 py-0.5 rounded-full text-[11px] border font-medium transition
-                         text-zinc-600 border-zinc-800 hover:border-zinc-600 hover:text-zinc-300">
-                  24 h
-                </button>
-                <button id="timeBtn-48" onclick="_setTimeFilter(48)"
-                  class="time-filter-btn px-2.5 py-0.5 rounded-full text-[11px] border font-medium transition
-                         text-zinc-600 border-zinc-800 hover:border-zinc-600 hover:text-zinc-300">
-                  48 h
-                </button>
-                <button id="timeBtn-72" onclick="_setTimeFilter(72)"
-                  class="time-filter-btn px-2.5 py-0.5 rounded-full text-[11px] border font-medium transition
-                         text-zinc-600 border-zinc-800 hover:border-zinc-600 hover:text-zinc-300">
-                  72 h
-                </button>
-                <span id="jobResultsCount" class="ml-auto text-[11px] font-mono text-zinc-600 tabular-nums"></span>
-              </div>
+              <!-- Fila 2: experiencia + modalidad pills -->
+              <div class="mt-2 flex flex-wrap items-center gap-2">
 
+                <!-- Selector de seniority -->
+                <select id="jobSeniorityFilter" onchange="_filterJobs()"
+                  class="bg-zinc-900 border border-zinc-700 rounded-lg text-[12px] text-zinc-300
+                         px-3 py-2 focus:outline-none focus:border-indigo-500 transition cursor-pointer">
+                  <option value="">⚪ Experiencia</option>
+                  <option value="junior">🟢 Junior</option>
+                  <option value="mid">🟡 Mid-level</option>
+                  <option value="senior">🟠 Senior</option>
+                  <option value="lead">🔴 Lead / Staff</option>
+                </select>
+
+                <!-- Pills de modalidad -->
+                <div class="flex gap-1.5 flex-wrap">
+                  <button id="modeBtn-all"    onclick="_setModeFilter('all')"
+                    class="mode-filter-btn px-3 py-1.5 rounded-lg text-[12px] border font-medium transition
+                           bg-indigo-600 text-white border-indigo-500">
+                    Todos
+                  </button>
+                  <button id="modeBtn-remote" onclick="_setModeFilter('remote')"
+                    class="mode-filter-btn px-3 py-1.5 rounded-lg text-[12px] border font-medium transition
+                           text-zinc-500 border-zinc-700 hover:border-zinc-500 hover:text-zinc-200">
+                    🌐 Solo remotos
+                  </button>
+                  <button id="modeBtn-hybrid" onclick="_setModeFilter('hybrid')"
+                    class="mode-filter-btn px-3 py-1.5 rounded-lg text-[12px] border font-medium transition
+                           text-zinc-500 border-zinc-700 hover:border-zinc-500 hover:text-zinc-200">
+                    🏢 Híbridos
+                  </button>
+                </div>
+
+                <!-- Pills de tiempo -->
+                <div class="flex gap-1.5 ml-auto">
+                  <button id="timeBtn-0"  onclick="_setTimeFilter(0)"
+                    class="time-filter-btn px-2.5 py-1 rounded-lg text-[11px] border font-medium transition
+                           bg-zinc-700 text-zinc-200 border-zinc-600">
+                    Todas
+                  </button>
+                  <button id="timeBtn-24" onclick="_setTimeFilter(24)"
+                    class="time-filter-btn px-2.5 py-1 rounded-lg text-[11px] border font-medium transition
+                           text-zinc-600 border-zinc-800 hover:border-zinc-600 hover:text-zinc-300">
+                    24 h
+                  </button>
+                  <button id="timeBtn-48" onclick="_setTimeFilter(48)"
+                    class="time-filter-btn px-2.5 py-1 rounded-lg text-[11px] border font-medium transition
+                           text-zinc-600 border-zinc-800 hover:border-zinc-600 hover:text-zinc-300">
+                    48 h
+                  </button>
+                  <button id="timeBtn-72" onclick="_setTimeFilter(72)"
+                    class="time-filter-btn px-2.5 py-1 rounded-lg text-[11px] border font-medium transition
+                           text-zinc-600 border-zinc-800 hover:border-zinc-600 hover:text-zinc-300">
+                    72 h
+                  </button>
+                </div>
+              </div>
             </div>
 
-            <!-- ── Cabecera de columnas ──────────────────────────────── -->
-            <div class="shrink-0 bg-zinc-950 border-b border-zinc-800/60 px-5 py-1.5">
-              <div class="flex items-center gap-3 text-[10px] uppercase tracking-widest text-zinc-700">
-                <span class="flex-1">Puesto</span>
-                <span class="hidden sm:block shrink-0 w-32 text-right">Empresa</span>
-                <span class="hidden md:block shrink-0 w-16 text-center">Origen</span>
-                <span class="shrink-0 w-20 text-right">Fecha</span>
-              </div>
+            <!-- ── Barra de estadísticas ─────────────────────────────────── -->
+            <div class="shrink-0 bg-zinc-950 border-b border-zinc-800/60 px-5 py-2 flex items-center gap-3 flex-wrap">
+              <span id="jobResultsCount" class="text-[12px] font-semibold text-white tabular-nums"></span>
+              <span id="jobNewCount"     class="text-[11px] text-emerald-400 tabular-nums hidden">
+                ⚡ <span id="jobNewCountVal"></span> nuevas esta semana
+              </span>
+              <span class="ml-auto text-[11px] text-zinc-600 uppercase tracking-widest">Ordenado por fecha</span>
             </div>
 
-            <!-- ── Lista de ofertas ───────────────────────────────────── -->
+            <!-- ── Lista de ofertas ───────────────────────────────────────── -->
             <div id="jobResultsContainer" class="flex-1 overflow-y-auto min-h-0">
               <p class="text-xs text-zinc-600 py-10 text-center">Cargando ofertas…</p>
             </div>
@@ -1009,24 +1055,26 @@
         return String(str ?? "").replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;");
       }
 
-      // ─── Buscador minimalista ─────────────────────────────────────────────
+      // ─── Buscador estilo Remote Rocketship ───────────────────────────────
 
       // Cache local de todas las ofertas descargadas desde sent_jobs
-      let localJobsCache   = [];
-      let _activeTimeFilter = 0; // 0 = todas, 24/48/72 = últimas N horas
+      let localJobsCache    = [];
+      let _activeTimeFilter = 0;     // 0 = todas, 24/48/72 = últimas N horas
+      let _activeModeFilter = "all"; // "all" | "remote" | "hybrid"
 
       // Descarga todas las ofertas de sent_jobs y las guarda en localJobsCache
       async function fetchLiveJobs() {
         const container = document.getElementById("jobResultsContainer");
-        const countEl   = document.getElementById("jobResultsCount");
         container.innerHTML = '<p class="text-xs text-zinc-600 py-8 text-center animate-pulse">Cargando ofertas…</p>';
-        if (countEl) countEl.textContent = "";
 
-        // Resetear al entrar a la vista: input limpio, filtro = Todas
-        const input = document.getElementById("jobSearchInput");
-        if (input) input.value = "";
+        // Resetear filtros al entrar a la vista
+        document.getElementById("jobSearchInput").value    = "";
+        document.getElementById("jobLocationInput").value  = "";
+        document.getElementById("jobSeniorityFilter").value = "";
         _activeTimeFilter = 0;
+        _activeModeFilter = "all";
         _updateTimeFilterUI(0);
+        _updateModeFilterUI("all");
 
         try {
           const { data, error } = await db
@@ -1037,21 +1085,46 @@
           if (error) throw error;
 
           localJobsCache = data || [];
+          _updateStatsBar(localJobsCache);
           _renderJobList(localJobsCache);
         } catch (e) {
           container.innerHTML = `<p class="text-xs text-red-400 py-6 text-center">Error al cargar: ${escapeHtml(e.message)}</p>`;
         }
       }
 
-      // Actualiza el estilo visual de los pills sin disparar un re-render
+      // Actualiza la barra de estadísticas superior
+      function _updateStatsBar(jobs) {
+        const countEl  = document.getElementById("jobResultsCount");
+        const newEl    = document.getElementById("jobNewCount");
+        const newValEl = document.getElementById("jobNewCountVal");
+        const weekCutoff = Date.now() - 7 * 86_400_000;
+        const newCount   = jobs.filter(j => new Date(j.sent_at).getTime() >= weekCutoff).length;
+        if (countEl)  countEl.textContent  = `${jobs.length.toLocaleString("es-AR")} ofertas en total`;
+        if (newValEl) newValEl.textContent = newCount.toLocaleString("es-AR");
+        if (newEl)    newEl.classList.toggle("hidden", newCount === 0);
+      }
+
+      // Actualiza el estilo visual de los pills de tiempo
       function _updateTimeFilterUI(hours) {
         document.querySelectorAll(".time-filter-btn").forEach(btn => {
-          const isActive = btn.id === `timeBtn-${hours}`;
-          btn.classList.toggle("bg-zinc-700",     isActive);
-          btn.classList.toggle("text-white",      isActive);
-          btn.classList.toggle("border-zinc-600", isActive);
-          btn.classList.toggle("text-zinc-500",   !isActive);
-          btn.classList.toggle("border-zinc-800", !isActive);
+          const active = btn.id === `timeBtn-${hours}`;
+          btn.classList.toggle("bg-zinc-700",     active);
+          btn.classList.toggle("text-zinc-200",   active);
+          btn.classList.toggle("border-zinc-600", active);
+          btn.classList.toggle("text-zinc-600",   !active);
+          btn.classList.toggle("border-zinc-800", !active);
+        });
+      }
+
+      // Actualiza el estilo visual de los pills de modalidad
+      function _updateModeFilterUI(mode) {
+        document.querySelectorAll(".mode-filter-btn").forEach(btn => {
+          const active = btn.id === `modeBtn-${mode}`;
+          btn.classList.toggle("bg-indigo-600",    active);
+          btn.classList.toggle("text-white",        active);
+          btn.classList.toggle("border-indigo-500", active);
+          btn.classList.toggle("text-zinc-500",    !active);
+          btn.classList.toggle("border-zinc-700",  !active);
         });
       }
 
@@ -1059,22 +1132,31 @@
       function _setTimeFilter(hours) {
         _activeTimeFilter = hours;
         _updateTimeFilterUI(hours);
-        const query = document.getElementById("jobSearchInput")?.value ?? "";
-        _filterJobs(query);
+        _filterJobs();
       }
 
-      // Aplica filtro de tiempo + texto sobre localJobsCache y re-renderiza
-      function _filterJobs(query) {
-        const q = query.trim().toLowerCase();
+      // Cambia el filtro de modalidad y re-renderiza
+      function _setModeFilter(mode) {
+        _activeModeFilter = mode;
+        _updateModeFilterUI(mode);
+        _filterJobs();
+      }
+
+      // Aplica todos los filtros activos sobre localJobsCache y re-renderiza
+      function _filterJobs() {
+        const q        = (document.getElementById("jobSearchInput")?.value    ?? "").trim().toLowerCase();
+        const locQ     = (document.getElementById("jobLocationInput")?.value  ?? "").trim().toLowerCase();
+        const seniority= (document.getElementById("jobSeniorityFilter")?.value ?? "").toLowerCase();
+
+        let filtered = localJobsCache;
 
         // 1. Filtro de tiempo
-        let filtered = localJobsCache;
         if (_activeTimeFilter > 0) {
           const cutoff = Date.now() - _activeTimeFilter * 3_600_000;
           filtered = filtered.filter(j => new Date(j.sent_at).getTime() >= cutoff);
         }
 
-        // 2. Filtro de texto
+        // 2. Filtro de texto (título / empresa / URL)
         if (q) {
           filtered = filtered.filter(j =>
             (j.title   ?? "").toLowerCase().includes(q) ||
@@ -1083,91 +1165,150 @@
           );
         }
 
+        // 3. Filtro de ubicación
+        if (locQ) {
+          filtered = filtered.filter(j =>
+            (j.title   ?? "").toLowerCase().includes(locQ) ||
+            (j.company ?? "").toLowerCase().includes(locQ) ||
+            (j.job_url ?? "").toLowerCase().includes(locQ)
+          );
+        }
+
+        // 4. Filtro de modalidad
+        if (_activeModeFilter === "remote") {
+          filtered = filtered.filter(j =>
+            /\b(remote|remoto|anywhere|distributed|worldwide)\b/i.test((j.title ?? "") + " " + (j.job_url ?? ""))
+          );
+        } else if (_activeModeFilter === "hybrid") {
+          filtered = filtered.filter(j => /\b(h[íi]brido|hybrid)\b/i.test(j.title ?? ""));
+        }
+
+        // 5. Filtro de seniority
+        if (seniority) {
+          const seniorityMap = {
+            junior: /\b(junior|jr\.?|entry[\s-]level|intern|trainee|aprendiz|pasante)\b/i,
+            mid:    /\b(mid[\s-]?level|semi[\s-]?senior|ssr|pleno|middle)\b/i,
+            senior: /\b(senior|sr\.?)\b/i,
+            lead:   /\b(lead|staff|principal|architect|director|head of|manager|vp|chief)\b/i,
+          };
+          const re = seniorityMap[seniority];
+          if (re) filtered = filtered.filter(j => re.test(j.title ?? ""));
+        }
+
         _renderJobList(filtered);
       }
 
-      // Convierte una fecha ISO a texto relativo en español
+      // Convierte una fecha ISO a texto relativo con emoji de fuego para recientes
       function _relativeTime(dateStr) {
         const diff  = Math.max(0, Date.now() - new Date(dateStr).getTime());
         const mins  = Math.floor(diff / 60_000);
         const hours = Math.floor(diff / 3_600_000);
         const days  = Math.floor(diff / 86_400_000);
-        if (mins  < 1)  return "Ahora";
-        if (mins  < 60) return `Hace ${mins} min`;
-        if (hours < 24) return `Hace ${hours} h`;
-        if (days  < 7)  return `Hace ${days}d`;
-        return new Date(dateStr).toLocaleDateString("es-AR", { day: "numeric", month: "short" });
+        if (mins  < 1)  return { text: "Ahora",           hot: true  };
+        if (mins  < 60) return { text: `🔥 ${mins} min`,   hot: true  };
+        if (hours < 6)  return { text: `🔥 ${hours} h`,    hot: true  };
+        if (hours < 24) return { text: `Hace ${hours} h`,  hot: false };
+        if (days  < 7)  return { text: `Hace ${days}d`,    hot: false };
+        return {
+          text: new Date(dateStr).toLocaleDateString("es-AR", { day: "numeric", month: "short" }),
+          hot: false,
+        };
       }
 
       // Infiere el origen/ubicación de un job a partir de su título y URL
       function _inferLocation(job) {
         const text = ((job.title ?? '') + ' ' + (job.company ?? '')).toLowerCase();
         if (/\b(remote|remoto|anywhere|distributed|worldwide)\b/.test(text))
-          return { label: 'Remote',   cls: 'text-emerald-600 border-emerald-900 bg-emerald-950/40' };
+          return { label: '🌐 Remote',  cls: 'text-emerald-500 border-emerald-900/80 bg-emerald-950/40' };
         if (/\b(latam|latin\s*america|argentina|uruguay|chile|colombia|brasil|brazil|m[eé]xico|peru)\b/.test(text))
-          return { label: 'LATAM',    cls: 'text-zinc-500 border-zinc-800 bg-zinc-900' };
+          return { label: '🌎 LATAM',   cls: 'text-sky-500 border-sky-900/80 bg-sky-950/40' };
         try {
           const host = new URL(job.job_url ?? '').hostname;
-          if (host.includes('greenhouse'))      return { label: 'GH',       cls: 'text-zinc-500 border-zinc-800 bg-zinc-900' };
-          if (host.includes('lever'))           return { label: 'Lever',    cls: 'text-zinc-500 border-zinc-800 bg-zinc-900' };
-          if (host.includes('ashby'))           return { label: 'Ashby',    cls: 'text-zinc-500 border-zinc-800 bg-zinc-900' };
-          if (host.includes('workable'))        return { label: 'Workable', cls: 'text-zinc-500 border-zinc-800 bg-zinc-900' };
-          if (host.includes('smartrecruiters')) return { label: 'SR',       cls: 'text-zinc-500 border-zinc-800 bg-zinc-900' };
-          if (host.includes('bamboohr'))        return { label: 'Bamboo',   cls: 'text-zinc-500 border-zinc-800 bg-zinc-900' };
-          if (host.includes('remoteok'))        return { label: 'RemoteOK', cls: 'text-zinc-500 border-zinc-800 bg-zinc-900' };
-          if (host.includes('remotive'))        return { label: 'Remotive', cls: 'text-zinc-500 border-zinc-800 bg-zinc-900' };
-          if (host.includes('breezy'))          return { label: 'Breezy',   cls: 'text-zinc-500 border-zinc-800 bg-zinc-900' };
-          if (host.includes('recruitee'))       return { label: 'Recruitee',cls: 'text-zinc-500 border-zinc-800 bg-zinc-900' };
+          if (host.includes('greenhouse'))      return { label: 'Greenhouse',   cls: 'text-zinc-500 border-zinc-800 bg-zinc-900' };
+          if (host.includes('lever'))           return { label: 'Lever',        cls: 'text-zinc-500 border-zinc-800 bg-zinc-900' };
+          if (host.includes('ashby'))           return { label: 'Ashby',        cls: 'text-zinc-500 border-zinc-800 bg-zinc-900' };
+          if (host.includes('workable'))        return { label: 'Workable',     cls: 'text-zinc-500 border-zinc-800 bg-zinc-900' };
+          if (host.includes('smartrecruiters')) return { label: 'SmartRecruiters', cls: 'text-zinc-500 border-zinc-800 bg-zinc-900' };
+          if (host.includes('bamboohr'))        return { label: 'BambooHR',     cls: 'text-zinc-500 border-zinc-800 bg-zinc-900' };
+          if (host.includes('remoteok'))        return { label: 'RemoteOK',     cls: 'text-zinc-500 border-zinc-800 bg-zinc-900' };
+          if (host.includes('remotive'))        return { label: 'Remotive',     cls: 'text-zinc-500 border-zinc-800 bg-zinc-900' };
+          if (host.includes('breezy'))          return { label: 'Breezy',       cls: 'text-zinc-500 border-zinc-800 bg-zinc-900' };
+          if (host.includes('recruitee'))       return { label: 'Recruitee',    cls: 'text-zinc-500 border-zinc-800 bg-zinc-900' };
         } catch {}
         return null;
       }
 
-      // Renderiza la lista de ofertas estilo Remote Rocketship (una fila por oferta)
+      // Infiere el seniority de un título para mostrar el badge de color
+      function _inferSeniority(title) {
+        const t = (title ?? "").toLowerCase();
+        if (/\b(lead|staff|principal|architect|director|head of|manager|vp|chief)\b/.test(t))
+          return { label: "Lead",   cls: "bg-red-900/50 text-red-400 border-red-800/60" };
+        if (/\b(senior|sr\.?)\b/.test(t))
+          return { label: "Senior", cls: "bg-orange-900/50 text-orange-400 border-orange-800/60" };
+        if (/\b(mid[\s-]?level|semi[\s-]?senior|ssr|pleno|middle)\b/.test(t))
+          return { label: "Mid",    cls: "bg-yellow-900/50 text-yellow-400 border-yellow-800/60" };
+        if (/\b(junior|jr\.?|entry[\s-]level|intern|trainee|aprendiz|pasante)\b/.test(t))
+          return { label: "Junior", cls: "bg-green-900/50 text-green-400 border-green-800/60" };
+        return null;
+      }
+
+      // Renderiza la lista de ofertas con cards estilo Remote Rocketship
       function _renderJobList(jobs) {
         const container = document.getElementById("jobResultsContainer");
-        const countEl   = document.getElementById("jobResultsCount");
-
-        if (countEl) {
-          countEl.textContent = jobs.length
-            ? `${jobs.length} oferta${jobs.length !== 1 ? "s" : ""}`
-            : "";
-        }
 
         if (!jobs.length) {
-          container.innerHTML = '<p class="text-xs text-zinc-600 py-10 text-center">No se encontraron ofertas.</p>';
+          container.innerHTML = `
+            <div class="py-16 text-center">
+              <p class="text-3xl mb-3">🚀</p>
+              <p class="text-sm text-zinc-500">No se encontraron ofertas con esos filtros.</p>
+              <p class="text-xs text-zinc-700 mt-1">Probá ajustando los criterios de búsqueda.</p>
+            </div>`;
           return;
         }
 
         container.innerHTML = jobs.map(job => {
-          const loc      = _inferLocation(job);
+          const loc                   = _inferLocation(job);
+          const seniority             = _inferSeniority(job.title);
+          const { text: timeText, hot } = _relativeTime(job.sent_at);
+
           const locBadge = loc
-            ? `<span class="hidden md:inline-flex shrink-0 w-16 justify-center">
-                 <span class="text-[10px] px-1.5 py-0.5 rounded border font-mono leading-tight ${loc.cls}">${escapeHtml(loc.label)}</span>
-               </span>`
-            : `<span class="hidden md:inline-block shrink-0 w-16"></span>`;
+            ? `<span class="shrink-0 text-[10px] px-1.5 py-0.5 rounded border font-medium leading-tight ${loc.cls}">${escapeHtml(loc.label)}</span>`
+            : "";
+
+          const senBadge = seniority
+            ? `<span class="shrink-0 text-[10px] px-1.5 py-0.5 rounded border font-medium leading-tight ${seniority.cls}">${seniority.label}</span>`
+            : "";
+
+          // Favicon de la empresa vía Google S2
+          let faviconHtml = `<div class="w-9 h-9 rounded-lg shrink-0 bg-zinc-800 flex items-center justify-center text-zinc-500 text-[13px] font-bold">${escapeHtml((job.company ?? "?")[0].toUpperCase())}</div>`;
+          try {
+            const host = new URL(job.job_url ?? "").hostname;
+            faviconHtml = `<img src="https://www.google.com/s2/favicons?sz=32&domain=${encodeURIComponent(host)}" alt="" loading="lazy" class="w-9 h-9 rounded-lg shrink-0 bg-zinc-800 object-contain" onerror="this.outerHTML='<div class=\\"w-9 h-9 rounded-lg shrink-0 bg-zinc-800 flex items-center justify-center text-zinc-500 text-[13px] font-bold\\">${escapeHtml((job.company ?? "?")[0].toUpperCase())}</div>'"/>`;
+          } catch {}
 
           return `
-            <div
-              onclick="window.open(${JSON.stringify(job.job_url)}, '_blank', 'noopener,noreferrer')"
-              class="group flex items-center gap-3 px-5 py-2 border-b border-zinc-800/50
-                     cursor-pointer hover:bg-zinc-900/60 active:bg-zinc-800/60 transition-colors"
-              title="${escapeHtml(job.title)}"
+            <a
+              href="${escapeHtml(job.job_url ?? "#")}"
+              target="_blank"
+              rel="noopener noreferrer"
+              class="group flex items-start gap-3 px-5 py-3.5 border-b border-zinc-800/50
+                     hover:bg-zinc-900/70 active:bg-zinc-800/60 transition-colors"
             >
-              <span class="flex-1 min-w-0 text-[13px] font-semibold text-white truncate
-                           group-hover:text-zinc-300 transition-colors leading-snug">
-                ${escapeHtml(job.title)}
-              </span>
-              <span class="hidden sm:inline-flex shrink-0 w-32 justify-end overflow-hidden">
-                <span class="inline-block max-w-full text-[11px] px-1.5 py-0.5 rounded
-                             bg-zinc-900 text-zinc-400 border border-zinc-800 truncate">
-                  ${escapeHtml(job.company ?? '')}
+              ${faviconHtml}
+              <div class="flex-1 min-w-0">
+                <span class="block text-[14px] font-semibold text-white group-hover:text-indigo-300 transition-colors leading-snug">
+                  ${escapeHtml(job.title ?? "")}
                 </span>
+                <div class="flex items-center gap-1.5 mt-1 flex-wrap">
+                  ${job.company ? `<span class="text-[12px] text-zinc-400 font-medium">${escapeHtml(job.company)}</span>` : ""}
+                  ${locBadge ? `<span class="text-zinc-700 text-[10px]">·</span>${locBadge}` : ""}
+                  ${senBadge ? `<span class="text-zinc-700 text-[10px]">·</span>${senBadge}` : ""}
+                </div>
+              </div>
+              <span class="shrink-0 text-[11px] font-mono tabular-nums whitespace-nowrap pt-0.5 ${hot ? "text-orange-400" : "text-zinc-600"}">
+                ${escapeHtml(timeText)}
               </span>
-              ${locBadge}
-              <span class="shrink-0 w-20 text-right text-[11px] font-mono text-zinc-600 tabular-nums">
-                ${_relativeTime(job.sent_at)}
-              </span>
-            </div>`;
+            </a>`;
         }).join("");
       }
 
