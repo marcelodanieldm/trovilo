@@ -350,3 +350,43 @@ def save_discovered_companies(discovered_list: list[dict]) -> int:
         log.info("  + %-20s [%s]", c["ats_id"], c["ats_type"])
 
     return len(new_companies)
+
+
+# ---------------------------------------------------------------------------
+# Punto de entrada — usado por GitHub Actions y ejecución local
+# ---------------------------------------------------------------------------
+
+if __name__ == "__main__":
+    import os
+    import sys
+
+    logging.basicConfig(
+        level=logging.INFO,
+        format="[%(levelname)s] %(message)s",
+        stream=sys.stdout,
+        force=True,
+    )
+
+    # Leer keyword desde variable de entorno (GitHub Actions) o argumento CLI
+    keyword = (
+        os.environ.get("DISCOVERY_KEYWORD")
+        or (sys.argv[1] if len(sys.argv) > 1 else "")
+        or "QA"
+    )
+
+    log.info("══════════════════════════════════════")
+    log.info("Trovilo — Company Discovery")
+    log.info("Keyword: '%s'", keyword)
+    log.info("══════════════════════════════════════")
+
+    discovered = discover_new_ats_companies(keyword)
+
+    if not discovered:
+        log.info("Ninguna empresa descubierta en esta ejecución.")
+        sys.exit(0)
+
+    added = save_discovered_companies(discovered)
+
+    log.info("══════════════════════════════════════")
+    log.info("Resumen: %d descubiertas / %d nuevas insertadas.", len(discovered), added)
+    log.info("══════════════════════════════════════")

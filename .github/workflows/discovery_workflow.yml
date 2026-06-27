@@ -1,0 +1,76 @@
+name: Trovilo — Company Discovery
+
+on:
+  # Domingos a las 3:42 AM UTC — hora caótica para no coincidir con el
+  # cron estándar de bots (0 0 * * 0, 0 3 * * 0, etc.)
+  schedule:
+    - cron: "42 3 * * 0"
+  # Permite disparar manualmente con un keyword personalizado
+  workflow_dispatch:
+    inputs:
+      tech_keyword:
+        description: "Término de búsqueda (ej: QA, Python, React)"
+        required: false
+        default: "QA"
+
+jobs:
+  discover:
+    runs-on: ubuntu-latest
+
+    # Solo SUPABASE — este job no envía notificaciones por Telegram
+    env:
+      SUPABASE_URL:       ${{ secrets.SUPABASE_URL }}
+      SUPABASE_KEY:       ${{ secrets.SUPABASE_KEY }}
+      DISCOVERY_KEYWORD:  ${{ github.event.inputs.tech_keyword || 'QA' }}
+
+    steps:
+      # ------------------------------------------------------------------
+      # 1. Jitter de arranque — retraso aleatorio 1–120 s.
+      #    Evita que múltiples workflows del repo golpeen los mismos
+      #    servidores DDG/ATS exactamente a las 3:42:00 UTC.
+      # ------------------------------------------------------------------
+      - name: Startup jitter (anti-fingerprint delay)
+        run: |
+          DELAY=$(shuf -i 1-120 -n 1)
+          echo "Durmiendo ${DELAY}s antes de iniciar..."
+          sleep "$DELAY"
+
+      # ------------------------------------------------------------------
+      # 2. Checkout del repositorio
+      # ------------------------------------------------------------------
+      - name: Checkout código
+        uses: actions/checkout@v4
+
+      # ------------------------------------------------------------------
+      # 3. Python 3.11 con cache de pip
+      # ------------------------------------------------------------------
+      - name: Configurar Python 3.11
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: "pip"
+          cache-dependency-path: requirements.txt
+
+      # ------------------------------------------------------------------
+      # 4. Instalar dependencias Python
+      # ------------------------------------------------------------------
+      - name: Instalar dependencias
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+
+      # ------------------------------------------------------------------
+      # 5. Instalar Chromium + libs del sistema para Playwright.
+      #    company_discovery.py usa get_stealth_page() que requiere
+      #    el Chromium bundled de Playwright.
+      # ------------------------------------------------------------------
+      - name: Instalar Playwright Chromium
+        run: playwright install chromium --with-deps
+
+      # ------------------------------------------------------------------
+      # 6. Descubrir empresas nuevas y persistirlas en target_companies.
+      #    El keyword viene de la variable de entorno DISCOVERY_KEYWORD
+      #    (definida arriba, default "QA").
+      # ------------------------------------------------------------------
+      - name: Ejecutar company discovery
+        run: python company_discovery.py
