@@ -105,6 +105,20 @@
     @keyframes pulse { 0%,100%{opacity:1} 50%{opacity:.35} }
     .dot-live { animation: pulse 2s infinite; }
 
+    /* ── Search highlight <mark> ─────────────────────────────────────────
+       Resalta los tokens del query dentro del título de la oferta.
+       No se usa background amarillo puro — demasiado disruptivo en dark mode.
+       Se prefiere un tinte ámbar sutil que no rompa la legibilidad del texto.
+    ─────────────────────────────────────────────────────────────────── */
+    mark.search-mark {
+      background: rgba(251,191,36,.14);
+      color: #fcd34d;
+      border-radius: 2px;
+      padding: 0 1px;
+      font-style: normal;
+      font-weight: inherit;
+    }
+
     /* ── Visited row ─────────────────────────────────────────────────────
        Se aplica a la fila completa cuando el usuario ya abrió esa oferta.
        opacity + grayscale dan una señal visual inmediata sin ocultar el
@@ -480,13 +494,16 @@
 
           <!-- ── Header de columnas sticky (Vue-managed) ── -->
           <div v-show="!jobsLoading && !scrollerEmpty" id="jobs-col-header"
-               class="flex items-center gap-3 px-6 py-1.5 border-b border-edge-1 bg-surface-1 sticky top-0 z-10">
-            <div class="w-[30px] flex-shrink-0"></div>
-            <div class="flex-1 text-[9px] uppercase tracking-widest text-zinc-700 font-semibold">Puesto</div>
-            <div class="w-32 hidden md:block text-[9px] uppercase tracking-widest text-zinc-700 font-semibold">Empresa</div>
-            <div class="w-24 hidden lg:block text-[9px] uppercase tracking-widest text-zinc-700 font-semibold">Tipo</div>
-            <div class="w-16 text-[9px] uppercase tracking-widest text-zinc-700 font-semibold text-right">Hace</div>
-            <div class="w-16 flex-shrink-0"></div>
+               class="flex items-center justify-between px-4 py-1.5
+                      border-b border-zinc-900 bg-zinc-950 sticky top-0 z-10">
+            <span class="text-[9px] uppercase tracking-widest text-zinc-700 font-semibold font-mono">
+              Puesto · Empresa
+            </span>
+            <div class="flex items-center gap-4 text-[9px] uppercase tracking-widest text-zinc-700 font-semibold font-mono">
+              <span class="hidden sm:inline">Ubicación</span>
+              <span></span>
+              <span>Tiempo</span>
+            </div>
           </div>
 
           <!--
@@ -1324,247 +1341,281 @@ const TroviloScroller = {
 // oferta. Usa createElement + textContent para garantizar que ningún
 // valor de la BD pueda inyectar HTML arbitrario (XSS).
 // ─────────────────────────────────────────────────────────────────────
+// ─────────────────────────────────────────────────────────────────────
+// MÓDULO 4 · JOB ROW FACTORY — diseño de alta densidad
+// ─────────────────────────────────────────────────────────────────────
+//
+// Diseño de la fila (especificación UI):
+//
+//  ┌─────────────────────────────────────────────────────────────────┐
+//  │  [título semibold zinc-100]  [visto?] [Empresa mono badge]      │  ← bloque izquierdo
+//  │                                    [Location] [excl.] [2h ago]  │  ← bloque derecho
+//  └─────────────────────────────────────────────────────────────────┘
+//
+// Estrategia HTML string vs createElement:
+//   · Para estructuras de 8+ nodos, innerHTML con template literal
+//     es ~40% más rápido que N llamadas createElement+appendChild,
+//     ya que el browser parsea el subtree en un único paso de C++.
+//   · Los datos de usuario pasan por _esc() antes de entrar al template.
+//     Los <mark> los emite nuestro propio código → XSS-safe.
+//   · El <a> raíz se crea con createElement para poder adjuntar el
+//     event listener de visit-tracking de forma directa, sin delegación.
+// ─────────────────────────────────────────────────────────────────────
 const JobRowFactory = {
 
   /**
    * create(job) → HTMLAnchorElement
    * ────────────────────────────────
-   * Genera un <a> completo representando una oferta de trabajo.
-   *
-   * QA-Security ①  Se usa node.textContent en lugar de innerHTML para todo
-   *               texto proveniente de la BD. Un title con '<script>' nunca
-   *               se ejecutará porque textContent lo trata como texto plano.
-   *
-   * QA-Perf ③     cloneNode(true) sobre un template pre-construido sería más
-   *               rápido que createElement para lotes muy grandes (>500 rows).
-   *               Con ITEMS_PER_PAGE=50 la diferencia es imperceptible (<1ms).
+   * Punto de entrada. Crea la fila, inyecta el HTML, adjunta el tracker.
    */
   create(job) {
     const url       = job.job_url || '';
     const isVisited = VisitedJobs.has(url);
+    // Leer el query activo desde Vue para resaltar tokens en el título
+    const query     = (window.__trovilo?.jobSearch || '').trim();
 
     const a = document.createElement('a');
-    a.href         = this._safeUrl(url);
-    a.target       = '_blank';
-    a.rel          = 'noopener noreferrer';
+    a.href           = this._safeUrl(url);
+    a.target         = '_blank';
+    a.rel            = 'noopener noreferrer';
     a.dataset.jobUrl = url;
 
-    // Clases base de la fila; si ya fue visitada, aplicar estado visual
-    // directamente en la creación (sin esperar un re-render de Vue).
+    // ── Clases base según especificación ──
     a.className = [
-      'job-row',
-      'flex items-center gap-3 px-6 py-2.5',
-      'border-b border-edge-1 cursor-pointer group',
-      isVisited ? 'job-row-visited' : '',
+      'flex items-center justify-between',   // layout horizontal
+      'border-b border-zinc-900',             // separador limpio
+      'py-2.5 px-4',                          // espaciado mínimo de alta densidad
+      'bg-zinc-950/40',                       // fondo oscuro profundo
+      'hover:bg-zinc-900/60 transition-colors duration-150 cursor-pointer',
+      isVisited ? 'job-row-visited' : '',     // desvanecido si ya fue abierto
     ].filter(Boolean).join(' ');
 
-    // ── Favicon ──
-    a.appendChild(this._makeFavicon(job));
+    // ── Inyectar contenido en un solo paso de parsing ──
+    a.innerHTML = this._buildHTML(job, isVisited, query);
 
-    // ── Cuerpo: título + badges (incluye "visto" si aplica) ──
-    a.appendChild(this._makeBody(job, isVisited));
-
-    // ── Empresa ──
-    const co = document.createElement('div');
-    co.className = 'w-32 hidden md:flex flex-shrink-0 truncate text-[11.5px] text-zinc-600';
-    co.textContent = job.company || '';
-    a.appendChild(co);
-
-    // ── Tipo (remote / hybrid) ──
-    a.appendChild(this._makeType(job));
-
-    // ── Tiempo relativo ──
-    const { text: timeText, hot } = this._relativeTime(job.sent_at);
-    const timeEl = document.createElement('div');
-    timeEl.className = 'w-16 flex-shrink-0 text-right';
-    const timeSpan = document.createElement('span');
-    timeSpan.className = `text-[11px] tabular-nums ${hot ? 'text-amber-500' : 'text-zinc-700'}`;
-    timeSpan.textContent = timeText;
-    timeEl.appendChild(timeSpan);
-    a.appendChild(timeEl);
-
-    // ── Apply button (visible on hover via CSS .apply-btn) ──
-    const applyWrap = document.createElement('div');
-    applyWrap.className = 'w-16 flex-shrink-0 flex justify-end';
-    const applyBtn = document.createElement('span');
-    applyBtn.className = 'apply-btn text-[10px] font-semibold text-violet-500 border border-violet-900/60 rounded px-2 py-0.5 bg-violet-950/40';
-    applyBtn.textContent = 'Apply →';
-    applyWrap.appendChild(applyBtn);
-    a.appendChild(applyWrap);
-
-    // ── Click tracker ────────────────────────────────────────────────
-    // Se usa 'click' (no 'mousedown') para garantizar que el usuario
-    // efectivamente activó el enlace y no solo pasó el mouse.
-    // VisitedJobs.add() retorna true solo la primera vez → actualizamos
-    // el DOM una sola vez por URL, sin trabajo redundante en re-clicks.
-    //
-    // QA-UX ②  target="_blank" abre una nueva pestaña: la página actual
-    //          permanece visible. El cambio de clase es inmediatamente
-    //          perceptible por el usuario al volver a Trovilo.
-    //
-    // QA-Closure  La arrow function captura `a` (el nodo DOM) y `url`
-    //             por el closure de create(). Cuando TroviloScroller llame
-    //             a _clearDOM(), estos nodos se eliminan del DOM. Como el
-    //             listener es una arrow function interna sin referencias
-    //             externas, el GC libera tanto el listener como el nodo.
-    //             (Ver también QA-Memory ④ y ⑦ en TroviloScroller.)
+    // ── Visit tracker ────────────────────────────────────────────────
+    // 'click' (no 'mousedown') garantiza que el usuario activó el link.
+    // VisitedJobs.add() retorna true solo la primera vez → DOM update O(1).
+    // Closure sin refs externas: el nodo es GC-eligible tras _clearDOM().
     a.addEventListener('click', () => {
-      if (!VisitedJobs.add(url)) return; // ya estaba registrada
-
-      // Aplicar estado visual sin destruir ni re-crear el nodo
+      if (!VisitedJobs.add(url)) return;
       a.classList.add('job-row-visited');
-
-      // Mostrar el badge "visto" que está oculto en filas no visitadas
-      const badge = a.querySelector('.visited-badge');
-      if (badge) badge.classList.remove('hidden');
+      a.querySelector('.visited-badge')?.classList.remove('hidden');
     });
 
     return a;
   },
 
-  _makeFavicon(job) {
-    const wrap = document.createElement('div');
-    wrap.className = 'w-[30px] h-[30px] flex-shrink-0 rounded-md bg-surface-3 border border-edge-1 flex items-center justify-center overflow-hidden';
+  // ══════════════════════════════════════════════════════════════════
+  // _buildHTML — genera el string HTML completo de la fila
+  // ══════════════════════════════════════════════════════════════════
 
-    const initial = document.createElement('span');
-    initial.className = 'text-zinc-600 text-[11px] font-bold select-none';
-    initial.textContent = (job.company || job.title || '?')[0].toUpperCase();
-    wrap.appendChild(initial);
+  /**
+   * _buildHTML(job, isVisited, query) → string
+   *
+   * XSS-Safety: _esc() se aplica a title (raw), company, locLabel y timeText.
+   * Las etiquetas <mark> de _highlight() son emitidas por nuestro código.
+   */
+  _buildHTML(job, isVisited, query) {
+    const titleHtml = this._highlight(job.title || 'Sin título', query);
+    const company   = this._esc(job.company || '?');
+    const locLabel  = this._esc(this._locLabel(job));
+    const sen       = this._inferSen(job.title);
+    const { text: timeText, hot } = this._relativeTime(job.sent_at);
 
-    try {
-      const host = new URL(job.job_url || '').hostname;
-      const img  = document.createElement('img');
-      img.src    = `https://www.google.com/s2/favicons?sz=32&domain=${encodeURIComponent(host)}`;
-      img.alt    = '';
-      img.loading = 'lazy';
-      img.className = 'w-full h-full object-contain';
-      // QA-Security ②: el src es una URL de Google construida con hostname parseado,
-      // nunca con datos de usuario directos. El host viene de URL(), que lanza en
-      // caso de URL inválida (capturado por el try/catch).
-      img.onerror = () => { img.style.display = 'none'; };
-      wrap.insertBefore(img, initial);
-    } catch { /* URL inválida: solo se muestra el initial */ }
+    // ── BLOQUE IZQUIERDO: título + badges de identidad ──────────────
+    //
+    //  [título]  [visto]  [Empresa]  [Sen?]
+    //
+    const visitedHtml = isVisited
+      ? `<span class="visited-badge">visto</span>`
+      : `<span class="visited-badge hidden">visto</span>`;
 
-    return wrap;
+    // Badge de seniority inline junto al título (no en el bloque derecho)
+    const senHtml = sen
+      ? `<span class="inline-flex items-center text-[9px] font-semibold uppercase tracking-wider
+                      px-1.5 py-0.5 rounded border flex-shrink-0 ${this._senCls(sen.label)}"
+                >${sen.label}</span>`
+      : '';
+
+    const leftBlock = /* html */`
+<div class="flex items-center min-w-0 flex-1 gap-0 overflow-hidden">
+  <span class="font-semibold text-zinc-100 text-sm tracking-tight leading-none truncate shrink">
+    ${titleHtml}
+  </span>
+  ${visitedHtml}
+  <span class="bg-zinc-800/60 text-zinc-300 text-xs px-2 py-0.5 rounded
+               font-mono ml-3 inline-block flex-shrink-0 truncate max-w-[200px]">
+    ${company}
+  </span>
+  ${senHtml}
+</div>`;
+
+    // ── BLOQUE DERECHO: metadatos alineados a la derecha ─────────────
+    //
+    //  [Remote / US]  [excl.]  [2h ago]
+    //
+    const locHtml = locLabel
+      ? `<span class="hidden sm:inline whitespace-nowrap">${locLabel}</span>`
+      : '';
+
+    // Badge exclusiva: emerald sutil según especificación
+    const exclHtml = job.not_on_linkedin
+      ? `<span class="text-emerald-500/90 bg-emerald-950/30 px-1.5 py-0.5 rounded
+                      border border-emerald-900/40 text-[10px] font-semibold
+                      whitespace-nowrap">excl.</span>`
+      : '';
+
+    const timeHtml = `<span class="tabular-nums whitespace-nowrap min-w-[48px] text-right
+                                   ${hot ? 'text-amber-400/90' : 'text-zinc-600'}"
+                           >${this._esc(timeText)}</span>`;
+
+    const rightBlock = /* html */`
+<div class="flex items-center gap-4 text-xs font-mono text-zinc-500 flex-shrink-0 ml-4">
+  ${locHtml}
+  ${exclHtml}
+  ${timeHtml}
+</div>`;
+
+    return leftBlock + rightBlock;
   },
 
-  _makeBody(job, isVisited = false) {
-    const body = document.createElement('div');
-    body.className = 'flex-1 min-w-0 flex items-center gap-2 flex-wrap';
+  // ══════════════════════════════════════════════════════════════════
+  // Helpers de contenido
+  // ══════════════════════════════════════════════════════════════════
 
-    const title = document.createElement('span');
-    title.className = 'job-title-text text-[13px] font-medium text-zinc-300 truncate transition-colors leading-none';
-    title.textContent = job.title || ''; // textContent: XSS-safe
-    body.appendChild(title);
+  /**
+   * _highlight(rawText, query) → string (HTML con <mark>)
+   * ───────────────────────────────────────────────────────
+   * 1. Escapa el texto crudo (_esc) → ningún dato del job puede inyectar HTML.
+   * 2. Envuelve los tokens del query en <mark class="search-mark">.
+   *
+   * Limitación conocida: si el query tiene caracteres especiales HTML
+   * (&, <, >) el match fallará gracefully (texto visible, sin marks).
+   * Esto es correcto: nunca se expone XSS.
+   */
+  _highlight(rawText, query) {
+    const escaped = this._esc(rawText);
+    if (!query) return escaped;
 
-    // ── Badge "visto" ──────────────────────────────────────────────────
-    // Se inserta siempre en el DOM para que el click handler pueda
-    // mostrarlo sin buscar en el árbol completo. Si la oferta no fue
-    // visitada, está oculto con la clase 'hidden' (display:none).
-    // QA-UX ③  El badge va ANTES que los otros badges (excl., loc.,
-    //          seniority) para que el historial sea visible al primer
-    //          golpe de vista, sin que el usuario tenga que leer el título.
-    const visitedBadge = document.createElement('span');
-    visitedBadge.className = `visited-badge${isVisited ? '' : ' hidden'}`;
-    visitedBadge.textContent = 'visto';
-    body.appendChild(visitedBadge);
+    const tokens = query
+      .trim()
+      .split(/\s+/)
+      .map(t => t.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')) // escapar para RegExp
+      .filter(t => t.length > 1);  // ignorar caracteres sueltos
 
-    // Badge: exclusiva
-    if (job.not_on_linkedin) {
-      body.appendChild(this._badge('excl.', 'badge-excl'));
+    if (!tokens.length) return escaped;
+
+    return escaped.replace(
+      new RegExp(`(${tokens.join('|')})`, 'gi'),
+      '<mark class="search-mark">$1</mark>'
+    );
+  },
+
+  /**
+   * _esc(str) → string
+   * ────────────────────
+   * Escapa los 5 caracteres especiales de HTML. Equivalente a textContent
+   * para uso en template literals de innerHTML.
+   */
+  _esc(str) {
+    return String(str ?? '')
+      .replace(/&/g, '&amp;')
+      .replace(/</g, '&lt;')
+      .replace(/>/g, '&gt;')
+      .replace(/"/g, '&quot;')
+      .replace(/'/g, '&#39;');
+  },
+
+  /**
+   * _locLabel(job) → string
+   * ────────────────────────
+   * Produce etiquetas como 'Remote / US', 'Remote / LATAM'.
+   * Orden de precedencia: campo location del feed → título → URL del ATS.
+   */
+  _locLabel(job) {
+    const stored = (job.location || '').trim();
+
+    // Usar el campo location del feed si es informativo y breve
+    if (stored && !/^remote$/i.test(stored)) {
+      return stored.length > 28 ? stored.substring(0, 26) + '…' : stored;
     }
 
-    // Badge: ubicación
-    const loc = this._inferLoc(job);
-    if (loc) body.appendChild(this._badge(loc.label, loc.cls));
-
-    // Badge: seniority
-    const sen = this._inferSen(job.title);
-    if (sen) body.appendChild(this._badge(sen.label, sen.cls));
-
-    return body;
-  },
-
-  _makeType(job) {
-    const wrap = document.createElement('div');
-    wrap.className = 'w-24 hidden lg:flex flex-shrink-0 text-[10px]';
-    const text = document.createElement('span');
-    const titleUrl = (job.title || '') + (job.job_url || '');
-    if (/remote|remoto|anywhere|worldwide/i.test(titleUrl)) {
-      text.className = 'text-emerald-600';
-      text.textContent = 'remote';
-    } else if (/hybrid|híbrido/i.test(job.title || '')) {
-      text.className = 'text-sky-600';
-      text.textContent = 'hybrid';
-    } else {
-      text.className = 'text-zinc-700';
-      text.textContent = '—';
-    }
-    wrap.appendChild(text);
-    return wrap;
-  },
-
-  _badge(label, cls) {
-    const span = document.createElement('span');
-    span.className = `badge ${cls} flex-shrink-0`;
-    span.textContent = label;
-    return span;
-  },
-
-  _inferLoc(job) {
     const text = `${job.title || ''} ${job.company || ''}`.toLowerCase();
-    if (/\b(remote|remoto|anywhere|distributed|worldwide)\b/.test(text))
-      return { label: 'Remote', cls: 'badge-remote' };
-    if (/\b(latam|latin\s*america|argentina|uruguay|chile|colombia|brasil|brazil|m[eé]xico|peru)\b/.test(text))
-      return { label: 'LATAM', cls: 'badge-latam' };
+
+    if (/\b(worldwide|anywhere|distributed|global)\b/.test(text)) return 'Remote / Worldwide';
+    if (/\b(united states|usa|us[ -]based)\b/.test(text))          return 'Remote / US';
+    if (/\b(argentina)\b/.test(text))                               return 'Remote / AR';
+    if (/\b(latam|latin\s*america)\b/.test(text))                   return 'Remote / LATAM';
+    if (/\b(colombia)\b/.test(text))                                return 'Remote / CO';
+    if (/\b(m[eé]xico|mexico)\b/.test(text))                        return 'Remote / MX';
+    if (/\b(brasil|brazil)\b/.test(text))                           return 'Remote / BR';
+    if (/\b(remote|remoto)\b/.test(text))                           return 'Remote';
+
     try {
       const host = new URL(job.job_url || '').hostname;
-      const ATS  = { greenhouse: 'Greenhouse', lever: 'Lever', ashby: 'Ashby',
-                     workable: 'Workable', remoteok: 'RemoteOK', remotive: 'Remotive' };
-      for (const [k, v] of Object.entries(ATS))
-        if (host.includes(k)) return { label: v, cls: 'badge-ats' };
+      if (host.includes('remoteok'))       return 'Remote / Global';
+      if (host.includes('remotive'))       return 'Remote / Global';
+      if (host.includes('arbeitnow'))      return 'Remote / EU';
+      if (host.includes('weworkremotely')) return 'Remote';
     } catch {}
-    return null;
+
+    return '';
   },
 
-  _inferSen(title = '') {
-    const t = title.toLowerCase();
-    if (/\b(lead|staff|principal|architect|director|head of|manager|vp|chief)\b/.test(t)) return { label: 'Lead',   cls: 'badge-lead' };
-    if (/\b(senior|sr\.?)\b/.test(t))                                                     return { label: 'Senior', cls: 'badge-senior' };
-    if (/\b(mid[\s-]?level|semi[\s-]?senior|ssr|pleno|middle)\b/.test(t))                 return { label: 'Mid',    cls: 'badge-mid' };
-    if (/\b(junior|jr\.?|entry[\s-]level|intern|trainee)\b/.test(t))                     return { label: 'Junior', cls: 'badge-junior' };
-    return null;
-  },
-
+  /**
+   * _relativeTime(dateStr) → { text: string, hot: boolean }
+   * ──────────────────────────────────────────────────────────
+   * Formato en inglés: 'just now', '30m ago', '2h ago', '3d ago', 'Jun 5'.
+   * hot=true para ofertas con menos de 6h → color ámbar en la UI.
+   */
   _relativeTime(dateStr) {
     const diff  = Math.max(0, Date.now() - new Date(dateStr).getTime());
     const mins  = Math.floor(diff / 60_000);
     const hours = Math.floor(diff / 3_600_000);
     const days  = Math.floor(diff / 86_400_000);
-    if (mins  < 1)  return { text: 'ahora', hot: true };
-    if (mins  < 60) return { text: `${mins}m`,  hot: true };
-    if (hours < 6)  return { text: `${hours}h`, hot: true };
-    if (hours < 24) return { text: `${hours}h`, hot: false };
-    if (days  < 7)  return { text: `${days}d`,  hot: false };
+
+    if (mins  < 1)  return { text: 'just now',     hot: true  };
+    if (mins  < 60) return { text: `${mins}m ago`,  hot: true  };
+    if (hours < 6)  return { text: `${hours}h ago`, hot: true  };
+    if (hours < 24) return { text: `${hours}h ago`, hot: false };
+    if (days  < 7)  return { text: `${days}d ago`,  hot: false };
+
     return {
-      text: new Date(dateStr).toLocaleDateString('es-AR', { day: 'numeric', month: 'short' }),
-      hot: false,
+      text: new Date(dateStr).toLocaleDateString('en-US', { month: 'short', day: 'numeric' }),
+      hot:  false,
     };
+  },
+
+  _inferSen(title = '') {
+    const t = title.toLowerCase();
+    if (/\b(lead|staff|principal|architect|director|head of|manager|vp|chief)\b/.test(t)) return { label: 'Lead'   };
+    if (/\b(senior|sr\.?)\b/.test(t))                                                     return { label: 'Senior' };
+    if (/\b(mid[\s-]?level|semi[\s-]?senior|ssr|pleno|middle)\b/.test(t))                 return { label: 'Mid'    };
+    if (/\b(junior|jr\.?|entry[\s-]level|intern|trainee)\b/.test(t))                     return { label: 'Junior' };
+    return null;
+  },
+
+  /** Clases Tailwind para el badge de seniority inline en el título. */
+  _senCls(label) {
+    return {
+      Lead:   'text-red-400/80    border-red-900/40    bg-red-950/30',
+      Senior: 'text-orange-400/80 border-orange-900/40 bg-orange-950/30',
+      Mid:    'text-yellow-400/80 border-yellow-900/40 bg-yellow-950/30',
+      Junior: 'text-green-400/80  border-green-900/40  bg-green-950/30',
+    }[label] || 'text-zinc-500 border-zinc-800/60 bg-transparent';
   },
 
   /**
    * _safeUrl(url) → string
-   * QA-Security ③  Solo permite protocolos http/https. Cualquier otro
-   *               (javascript:, data:, etc.) se reemplaza por '#'.
-   *               Protege contra href injection si llegara un job_url
-   *               malicioso desde la BD o un feed externo comprometido.
+   * ──────────────────────
+   * Sólo permite http/https. javascript:, data: y cualquier otro
+   * protocolo se reemplazan por '#' para evitar href injection.
    */
   _safeUrl(url = '') {
     try {
-      const parsed = new URL(url);
-      return (parsed.protocol === 'https:' || parsed.protocol === 'http:')
-        ? url
-        : '#';
+      const p = new URL(url);
+      return (p.protocol === 'https:' || p.protocol === 'http:') ? url : '#';
     } catch { return '#'; }
   },
 };
