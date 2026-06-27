@@ -1303,9 +1303,12 @@
             >
               ${faviconHtml}
               <div class="flex-1 min-w-0">
-                <span class="block text-[14px] font-semibold text-white group-hover:text-indigo-300 transition-colors leading-snug">
-                  ${escapeHtml(job.title ?? "")}
-                </span>
+                <div class="flex items-start gap-1.5 flex-wrap">
+                  <span class="text-[14px] font-semibold text-white group-hover:text-indigo-300 transition-colors leading-snug">
+                    ${escapeHtml(job.title ?? "")}
+                  </span>
+                  ${exclusivaBadge}
+                </div>
                 <div class="flex items-center gap-1.5 mt-1 flex-wrap">
                   ${job.company ? `<span class="text-[12px] text-zinc-400 font-medium">${escapeHtml(job.company)}</span>` : ""}
                   ${locBadge ? `<span class="text-zinc-700 text-[10px]">·</span>${locBadge}` : ""}
