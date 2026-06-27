@@ -167,7 +167,7 @@
             <button id="navBusqueda" onclick="switchPanel('busqueda')"
               class="sidebar-nav-item active w-full flex items-center gap-2.5 px-3 py-2.5 rounded-lg text-sm font-medium transition">
               <span class="text-base leading-none">🔍</span>
-              Búsqueda
+              Búsqueda via Telegram
             </button>
             <button id="navMiembros" onclick="switchPanel('miembros')"
               class="sidebar-nav-item w-full flex items-center gap-2.5 px-3 py-2.5 rounded-lg text-sm font-medium transition">
@@ -526,6 +526,26 @@
                   </span>
                   <span id="exclusivasLabel">✨ Solo exclusivas</span>
                 </button>
+
+                <div class="h-5 w-px bg-zinc-800 mx-1 hidden sm:block"></div>
+
+                <select id="communitySourceSelect"
+                  class="bg-zinc-900 border border-zinc-800 rounded-md text-[11px] text-zinc-400 px-2.5 py-1
+                         focus:outline-none focus:border-zinc-600 cursor-pointer">
+                  <option value="all">Comunidades + nicho</option>
+                  <option value="rocketship">Remote Rocketship</option>
+                  <option value="remoteok">RemoteOK</option>
+                  <option value="remotive">Remotive</option>
+                  <option value="wwr">We Work Remotely</option>
+                  <option value="arbeitnow">Arbeitnow</option>
+                  <option value="cryptojobslist">CryptoJobsList</option>
+                </select>
+                <button id="communitySearchBtn" onclick="scrapeCommunitySources()"
+                  class="px-2.5 py-1 rounded-md text-[11px] border font-semibold transition
+                         bg-indigo-600/90 text-white border-indigo-500 hover:bg-indigo-500 disabled:opacity-50 disabled:cursor-not-allowed">
+                  Scrapear fuentes
+                </button>
+                <span id="communitySearchStatus" class="text-[11px] text-zinc-600"></span>
 
                 <div class="ml-auto flex items-center gap-2">
                   <span id="jobResultsCount" class="text-[11px] text-zinc-500 tabular-nums"></span>
@@ -1039,6 +1059,7 @@
       let _activeTimeFilter  = 0;     // 0 = todas, 24/48/72/168 horas
       let _activeModeFilter  = "all"; // "all" | "remote" | "hybrid"
       let _soloExclusivas    = false; // true = mostrar solo not_on_linkedin === true
+      const COMMUNITY_SEARCH_API_URL = "http://127.0.0.1:8765/search";
 
       // Descarga todas las ofertas de sent_jobs y las guarda en localJobsCache
       async function fetchLiveJobs() {
@@ -1136,6 +1157,54 @@
         _activeModeFilter = mode;
         _updateModeFilterUI(mode);
         _filterJobs();
+      }
+
+      function _setCommunityStatus(message, tone = "muted") {
+        const el = document.getElementById("communitySearchStatus");
+        if (!el) return;
+        el.textContent = message;
+        el.classList.toggle("text-red-400", tone === "error");
+        el.classList.toggle("text-emerald-400", tone === "ok");
+        el.classList.toggle("text-zinc-600", tone === "muted");
+      }
+
+      function _mergeCommunityJobs(jobs) {
+        const byUrl = new Map(localJobsCache.map(job => [job.job_url, job]));
+        for (const job of jobs) {
+          if (!job?.job_url) continue;
+          byUrl.set(job.job_url, {
+            ...job,
+            sent_at: job.sent_at || new Date().toISOString(),
+            not_on_linkedin: job.not_on_linkedin !== false,
+          });
+        }
+        localJobsCache = Array.from(byUrl.values()).sort((a, b) => new Date(b.sent_at) - new Date(a.sent_at));
+      }
+
+      async function scrapeCommunitySources() {
+        const btn = document.getElementById("communitySearchBtn");
+        const source = document.getElementById("communitySourceSelect")?.value || "all";
+        const query = document.getElementById("jobSearchInput")?.value?.trim() || "";
+        const location = document.getElementById("jobLocationInput")?.value || "";
+
+        btn.disabled = true;
+        _setCommunityStatus("Scrapeando…", "muted");
+
+        try {
+          const params = new URLSearchParams({ q: query, location, source, limit: "120" });
+          const res = await fetch(`${COMMUNITY_SEARCH_API_URL}?${params.toString()}`);
+          const payload = await res.json();
+          if (!res.ok || !payload.ok) throw new Error(payload.error || `HTTP ${res.status}`);
+
+          _mergeCommunityJobs(payload.jobs || []);
+          _filterJobs();
+          _setCommunityStatus(`${payload.count || 0} ofertas encontradas`, "ok");
+        } catch (e) {
+          _setCommunityStatus("API local apagada: ejecutá python community_search_api.py", "error");
+          console.error("Error al scrapear fuentes comunitarias", e);
+        } finally {
+          btn.disabled = false;
+        }
       }
 
       // Aplica todos los filtros activos sobre localJobsCache y re-renderiza

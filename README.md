@@ -146,6 +146,11 @@ Abrí `index.html` en el navegador (o deployalo en Netlify/Vercel/GitHub Pages).
 
 - **Gestionar filtros** de búsqueda por usuario de Telegram.
 - **Expandir fuentes**: importar nuevos job boards desde un archivo CSV/Excel o pegando URLs manualmente. Los dominios se validan contra `fuentes_scraper` y los nuevos se pueden agregar con un click.
+- **Buscador en vivo**: para scrapear comunidades y sitios de nicho desde la sección Buscador, levantá el API local antes de usar el botón:
+    ```bash
+    python community_search_api.py
+    ```
+    El endpoint queda disponible en `http://127.0.0.1:8765/search` y consulta Remote Rocketship, RemoteOK, Remotive, We Work Remotely, Arbeitnow y CryptoJobsList.
 
 ---
 
