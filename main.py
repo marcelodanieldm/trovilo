@@ -29,6 +29,14 @@ from browser import get_stealth_page
 from scraper import execute_unbreakable_scraping, verify_linkedin_absence
 from notifier import supabase, bulk_filter_and_save, process_and_notify, notify_no_results
 from ats_engine import fetch_greenhouse_jobs, fetch_lever_jobs, RateLimitError
+from feed_ingester import (
+    fetch_arbeitnow_jobs,
+    fetch_cryptojobslist_jobs,
+    fetch_remoteok_jobs,
+    fetch_remotive_jobs,
+    fetch_weworkremotely_jobs,
+)
+from rocket_feeder import fetch_rocketship_jobs
 from telegram_notifier import send_job_alert
 
 # ---------------------------------------------------------------------------
@@ -103,11 +111,13 @@ def run_ats_pipeline() -> None:
 
     Flujo:
       1. Descarga target_companies activas de Supabase.
-      2. Por cada empresa llama al fetcher correspondiente según ats_type.
-      3. Filtra las ofertas por _TITLE_KEYWORDS (QA, Automation, Python…).
-      4. Consulta sent_jobs para identificar las realmente nuevas.
-      5. Envía un alert de Telegram por cada oferta nueva.
-      6. Hace upsert masivo en sent_jobs con title, company, job_url, sent_at.
+            2. Por cada empresa llama al fetcher correspondiente según ats_type.
+            3. Suma fuentes públicas rápidas (Remotive, WWR, RemoteOK, Arbeitnow,
+                CryptoJobsList y Remote Rocketship).
+            4. Filtra las ofertas por _TITLE_KEYWORDS (QA, Automation, Python…).
+            5. Consulta sent_jobs para identificar las realmente nuevas.
+            6. Envía un alert de Telegram por cada oferta nueva.
+            7. Hace upsert masivo en sent_jobs con title, company, job_url, sent_at.
     """
     log.info("── ATS pipeline: cargando empresas objetivo...")
 
@@ -129,7 +139,7 @@ def run_ats_pipeline() -> None:
     }
 
     # 1 + 2. Recolectar todas las ofertas de todos los ATS
-    all_jobs: list[dict] = []
+    raw_jobs_pool: list[dict] = []
     for row in companies:
         ats_type = (row.get("ats_type") or "").lower()
         ats_id   =  row.get("ats_id")   or ""
@@ -142,17 +152,55 @@ def run_ats_pipeline() -> None:
 
         try:
             jobs = fetcher(ats_id)
-            all_jobs.extend(jobs)
+            for job in jobs:
+                job.setdefault("_source", "ats")
+            raw_jobs_pool.extend(jobs)
         except RateLimitError:
             log.warning("ATS pipeline: rate-limit en %s — esperando 60 s.", name)
             time.sleep(60)
         except Exception as exc:
             log.error("ATS pipeline: error en %s (%s): %s", name, ats_type, exc)
 
-    log.info("ATS pipeline: %d oferta(s) recolectada(s) antes del filtro.", len(all_jobs))
+    log.info("ATS pipeline: %d oferta(s) ATS recolectada(s).", len(raw_jobs_pool))
 
-    # 3. Filtrar por palabras clave en el título
-    relevant = [j for j in all_jobs if _matches_keywords(j)]
+    # 3. Sumar fuentes públicas sin navegador (JSON/RSS/XML)
+    try:
+        feed_jobs = [
+            *fetch_remotive_jobs(),
+            *fetch_weworkremotely_jobs(),
+            *fetch_remoteok_jobs(),
+            *fetch_arbeitnow_jobs(),
+            *fetch_cryptojobslist_jobs(),
+        ]
+        for job in feed_jobs:
+            job["_source"] = "public_feed"
+            job["not_on_linkedin"] = True
+        raw_jobs_pool.extend(feed_jobs)
+        log.info(
+            "ATS pipeline: %d oferta(s) agregada(s) desde feeds públicos; pool total=%d.",
+            len(feed_jobs), len(raw_jobs_pool),
+        )
+    except Exception as exc:
+        log.error("ATS pipeline: error ingiriendo feeds públicos: %s", exc)
+
+    # 3b. Sumar Remote Rocketship (SSR/Next.js data + fallback HTML)
+    try:
+        rocket_jobs = fetch_rocketship_jobs()
+        for job in rocket_jobs:
+            job["_source"] = "remote_rocketship"
+            # Rocketship ya indexa fuera de LinkedIn; si el payload no trae señal
+            # explícita, entra como exclusiva por default para el buscador.
+            job.setdefault("not_on_linkedin", True)
+        raw_jobs_pool.extend(rocket_jobs)
+        log.info(
+            "ATS pipeline: %d oferta(s) agregada(s) desde Remote Rocketship; pool total=%d.",
+            len(rocket_jobs), len(raw_jobs_pool),
+        )
+    except Exception as exc:
+        log.error("ATS pipeline: error ingiriendo Remote Rocketship: %s", exc)
+
+    # 4. Filtrar por palabras clave en el título
+    relevant = [j for j in raw_jobs_pool if _matches_keywords(j)]
     log.info(
         "ATS pipeline: %d oferta(s) relevantes (keyword match).",
         len(relevant),
@@ -162,7 +210,7 @@ def run_ats_pipeline() -> None:
         log.info("ATS pipeline: ninguna oferta supera el filtro de keywords.")
         return
 
-    # 4. Consultar sent_jobs para identificar las realmente nuevas
+    # 5. Consultar sent_jobs para identificar las realmente nuevas
     urls = [j["job_url"] for j in relevant if j.get("job_url")]
     try:
         existing = (
@@ -187,7 +235,7 @@ def run_ats_pipeline() -> None:
         log.info("ATS pipeline: sin ofertas nuevas. Nada que notificar.")
         return
 
-    # 5. Enviar alert de Telegram por cada oferta nueva
+    # 6. Enviar alert de Telegram por cada oferta nueva
     sent_count = 0
     for job in new_jobs:
         ok = send_job_alert(
@@ -208,6 +256,13 @@ def run_ats_pipeline() -> None:
     #    sleep(3) entre llamadas para evitar rate-limit de DDG.
     log.info("ATS pipeline: verificando exclusividad LinkedIn para %d oferta(s)...", len(new_jobs))
     for job in new_jobs:
+        if job.get("not_on_linkedin") is True:
+            log.debug(
+                "ATS pipeline: '%s' — not_on_linkedin=True por origen %s.",
+                job.get("title"), job.get("_source", "unknown"),
+            )
+            continue
+
         try:
             job["not_on_linkedin"] = verify_linkedin_absence(
                 title   = job.get("title",   ""),
