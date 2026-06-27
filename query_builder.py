@@ -95,19 +95,29 @@ ALL_DOMAINS = [
 # ---------------------------------------------------------------------------
 
 _JOB_TYPE_TERMS: dict[str, str] = {
-    "remote":  '("Remote" OR "Remoto" OR "Distributed")',
-    "hybrid":  '("Hybrid" OR "Híbrido")',
-    "on-site": '("On-site" OR "Presencial" OR "On site")',
+    "remote":  '("Remote" OR "Remoto" OR "Distributed" OR "Distribuido" OR "Teletrabajo")',
+    "hybrid":  '("Hybrid" OR "Híbrido" OR "Semi-presencial")',
+    "on-site": '("On-site" OR "Presencial" OR "On site" OR "En oficina")',
 }
 
 _LOCATION_TERMS: dict[str, str] = {
-    "argentina":     '("Argentina" OR "AR")',
-    "uruguay":       '("Uruguay" OR "UY")',
-    "latin america": '("Latin America" OR "LATAM" OR "Latinoamérica")',
-    "latam":         '("Latin America" OR "LATAM" OR "Latinoamérica")',
+    "argentina":     '("Argentina" OR "AR" OR "Buenos Aires")',
+    "uruguay":       '("Uruguay" OR "UY" OR "Montevideo")',
+    "latin america": '("Latin America" OR "LATAM" OR "Latinoamérica" OR "América Latina")',
+    "latam":         '("Latin America" OR "LATAM" OR "Latinoamérica" OR "América Latina")',
+    "colombia":      '("Colombia" OR "CO" OR "Bogotá")',
+    "mexico":        '("Mexico" OR "México" OR "MX")',
+    "chile":         '("Chile" OR "CL" OR "Santiago")',
 }
 
-_EXCLUSIONS = "-inurl:privacy -inurl:terms -inurl:help"
+# Términos de rol en inglés y español — se agregan a toda query para
+# capturar posteos en ambos idiomas sin importar cómo los redacte la empresa.
+_ROLE_TERMS = (
+    '("developer" OR "engineer" OR "programmer" OR "software" '
+    'OR "desarrollador" OR "ingeniero" OR "programador" OR "técnico")'
+)
+
+_EXCLUSIONS = "-inurl:privacy -inurl:terms -inurl:help -inurl:cookie"
 MAX_QUERY_LENGTH = 1500
 
 
@@ -189,11 +199,18 @@ def build_duckduckgo_query(
 # ---------------------------------------------------------------------------
 
 def _build_suffix(tech: str, location: str, job_type: str) -> str:
-    """Construye el sufijo compartido por todos los lotes."""
+    """Construye el sufijo compartido por todos los lotes.
+
+    Estructura:
+      "tech1" "tech2" ROLE_TERMS(EN+ES) JOB_TYPE(EN+ES) LOCATION(EN+ES) exclusiones
+    """
     parts: list[str] = []
 
     for t in [_sanitize(t) for t in tech.split(",") if t.strip()]:
         parts.append(f'"{t}"')
+
+    # Términos de rol bilingüe (developer | desarrollador | etc.)
+    parts.append(_ROLE_TERMS)
 
     parts.append(_JOB_TYPE_TERMS.get(job_type.strip().lower(), f'"{_sanitize(job_type)}"'))
     parts.append(_LOCATION_TERMS.get(location.strip().lower(), f'"{_sanitize(location)}"'))
