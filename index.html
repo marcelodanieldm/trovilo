@@ -451,112 +451,75 @@
             </div><!-- /grid -->
           </div><!-- /panelFuentes -->
 
-          <!-- ══ PANEL: BUSCADOR — estilo Remote Rocketship ════════════ -->
+          <!-- ══ PANEL: BUSCADOR — minimalista ══════════════════════ -->
           <div id="panelBuscador" class="hidden flex flex-col" style="height:calc(100vh - 52px)">
 
-            <!-- ── Hero header ──────────────────────────────────────────── -->
-            <div class="shrink-0 bg-gradient-to-b from-zinc-900 to-zinc-950 border-b border-zinc-800/70 px-5 pt-7 pb-5">
-              <h2 class="text-2xl font-extrabold text-white tracking-tight leading-tight">
-                Encontrá tu próximo trabajo remoto
-              </h2>
-              <p class="mt-1 text-sm text-zinc-400">Buscá entre las ofertas detectadas por el scraper de trovilo</p>
+            <!-- ── Barra de filtros sticky ────────────────────────────────── -->
+            <div class="shrink-0 bg-zinc-950 border-b border-zinc-800 px-4 py-3 space-y-2">
 
-              <!-- Fila 1: título + ubicación -->
-              <div class="mt-4 grid grid-cols-1 sm:grid-cols-2 gap-2">
-                <div class="relative">
-                  <span class="absolute left-3 top-1/2 -translate-y-1/2 text-zinc-500 text-sm select-none">💼</span>
-                  <input
-                    id="jobSearchInput"
-                    type="search"
-                    placeholder="Título del puesto"
-                    oninput="_filterJobs()"
-                    autocomplete="off"
-                    class="w-full bg-zinc-900 border border-zinc-700 rounded-lg text-[13px] text-white
-                           placeholder-zinc-500 pl-9 pr-4 py-2.5
-                           focus:outline-none focus:border-indigo-500 transition"
-                  />
+              <!-- Fila 1: título libre + selects -->
+              <div class="flex gap-2 flex-wrap">
+                <div class="relative flex-1 min-w-[140px]">
+                  <svg class="pointer-events-none absolute left-2.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-zinc-600"
+                    fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+                    <path stroke-linecap="round" stroke-linejoin="round" d="M21 21l-4.35-4.35M17 11A6 6 0 1 1 5 11a6 6 0 0 1 12 0z"/>
+                  </svg>
+                  <input id="jobSearchInput" type="search" placeholder="💼 Job title…"
+                    oninput="_filterJobs()" autocomplete="off"
+                    class="w-full bg-zinc-900 border border-zinc-800 rounded-lg text-[12px] text-white
+                           placeholder-zinc-600 pl-8 pr-3 py-2 focus:outline-none focus:border-zinc-600 transition"/>
                 </div>
-                <div class="relative">
-                  <span class="absolute left-3 top-1/2 -translate-y-1/2 text-zinc-500 text-sm select-none">🌍</span>
-                  <input
-                    id="jobLocationInput"
-                    type="text"
-                    placeholder="Ubicación (ej. Remote, Argentina)"
-                    oninput="_filterJobs()"
-                    autocomplete="off"
-                    class="w-full bg-zinc-900 border border-zinc-700 rounded-lg text-[13px] text-white
-                           placeholder-zinc-500 pl-9 pr-4 py-2.5
-                           focus:outline-none focus:border-indigo-500 transition"
-                  />
-                </div>
-              </div>
-
-              <!-- Fila 2: experiencia + modalidad pills -->
-              <div class="mt-2 flex flex-wrap items-center gap-2">
-
-                <!-- Selector de seniority -->
+                <select id="jobLocationInput" onchange="_filterJobs()"
+                  class="bg-zinc-900 border border-zinc-800 rounded-lg text-[12px] text-zinc-400 px-2.5 py-2
+                         focus:outline-none focus:border-zinc-600 cursor-pointer">
+                  <option value="">🌍 Ubicación</option>
+                  <option value="remote">🌐 Remote</option>
+                  <option value="argentina">🇦🇷 Argentina</option>
+                  <option value="latam">🌎 LATAM</option>
+                  <option value="uruguay">🇺🇾 Uruguay</option>
+                  <option value="colombia">🇨🇴 Colombia</option>
+                  <option value="mexico">🇲🇽 México</option>
+                  <option value="brasil">🇧🇷 Brasil</option>
+                  <option value="united states">🇺🇸 USA</option>
+                </select>
                 <select id="jobSeniorityFilter" onchange="_filterJobs()"
-                  class="bg-zinc-900 border border-zinc-700 rounded-lg text-[12px] text-zinc-300
-                         px-3 py-2 focus:outline-none focus:border-indigo-500 transition cursor-pointer">
+                  class="bg-zinc-900 border border-zinc-800 rounded-lg text-[12px] text-zinc-400 px-2.5 py-2
+                         focus:outline-none focus:border-zinc-600 cursor-pointer">
                   <option value="">⚪ Experiencia</option>
                   <option value="junior">🟢 Junior</option>
-                  <option value="mid">🟡 Mid-level</option>
+                  <option value="mid">🟡 Mid</option>
                   <option value="senior">🟠 Senior</option>
-                  <option value="lead">🔴 Lead / Staff</option>
+                  <option value="lead">🔴 Lead</option>
                 </select>
+                <select id="jobTimeFilter" onchange="_setTimeFilterFromSelect(this.value)"
+                  class="bg-zinc-900 border border-zinc-800 rounded-lg text-[12px] text-zinc-400 px-2.5 py-2
+                         focus:outline-none focus:border-zinc-600 cursor-pointer">
+                  <option value="0">🆕 Fecha</option>
+                  <option value="24">24 h</option>
+                  <option value="48">48 h</option>
+                  <option value="72">72 h</option>
+                  <option value="168">Esta semana</option>
+                </select>
+              </div>
 
-                <!-- Pills de modalidad -->
-                <div class="flex gap-1.5 flex-wrap">
-                  <button id="modeBtn-all"    onclick="_setModeFilter('all')"
-                    class="mode-filter-btn px-3 py-1.5 rounded-lg text-[12px] border font-medium transition
-                           bg-indigo-600 text-white border-indigo-500">
-                    Todos
-                  </button>
-                  <button id="modeBtn-remote" onclick="_setModeFilter('remote')"
-                    class="mode-filter-btn px-3 py-1.5 rounded-lg text-[12px] border font-medium transition
-                           text-zinc-500 border-zinc-700 hover:border-zinc-500 hover:text-zinc-200">
-                    🌐 Solo remotos
-                  </button>
-                  <button id="modeBtn-hybrid" onclick="_setModeFilter('hybrid')"
-                    class="mode-filter-btn px-3 py-1.5 rounded-lg text-[12px] border font-medium transition
-                           text-zinc-500 border-zinc-700 hover:border-zinc-500 hover:text-zinc-200">
-                    🏢 Híbridos
-                  </button>
-                </div>
-
-                <!-- Pills de tiempo -->
-                <div class="flex gap-1.5 ml-auto">
-                  <button id="timeBtn-0"  onclick="_setTimeFilter(0)"
-                    class="time-filter-btn px-2.5 py-1 rounded-lg text-[11px] border font-medium transition
-                           bg-zinc-700 text-zinc-200 border-zinc-600">
-                    Todas
-                  </button>
-                  <button id="timeBtn-24" onclick="_setTimeFilter(24)"
-                    class="time-filter-btn px-2.5 py-1 rounded-lg text-[11px] border font-medium transition
-                           text-zinc-600 border-zinc-800 hover:border-zinc-600 hover:text-zinc-300">
-                    24 h
-                  </button>
-                  <button id="timeBtn-48" onclick="_setTimeFilter(48)"
-                    class="time-filter-btn px-2.5 py-1 rounded-lg text-[11px] border font-medium transition
-                           text-zinc-600 border-zinc-800 hover:border-zinc-600 hover:text-zinc-300">
-                    48 h
-                  </button>
-                  <button id="timeBtn-72" onclick="_setTimeFilter(72)"
-                    class="time-filter-btn px-2.5 py-1 rounded-lg text-[11px] border font-medium transition
-                           text-zinc-600 border-zinc-800 hover:border-zinc-600 hover:text-zinc-300">
-                    72 h
-                  </button>
+              <!-- Fila 2: modalidad pills + stats -->
+              <div class="flex items-center gap-1.5 flex-wrap">
+                <button id="modeBtn-all"    onclick="_setModeFilter('all')"
+                  class="mode-filter-btn px-2.5 py-1 rounded-md text-[11px] border font-medium transition
+                         bg-zinc-700 text-zinc-200 border-zinc-600">Todos</button>
+                <button id="modeBtn-remote" onclick="_setModeFilter('remote')"
+                  class="mode-filter-btn px-2.5 py-1 rounded-md text-[11px] border font-medium transition
+                         text-zinc-500 border-zinc-800 hover:border-zinc-600 hover:text-zinc-300">🌐 Remote</button>
+                <button id="modeBtn-hybrid" onclick="_setModeFilter('hybrid')"
+                  class="mode-filter-btn px-2.5 py-1 rounded-md text-[11px] border font-medium transition
+                         text-zinc-500 border-zinc-800 hover:border-zinc-600 hover:text-zinc-300">🏢 Híbrido</button>
+                <div class="ml-auto flex items-center gap-2">
+                  <span id="jobResultsCount" class="text-[11px] text-zinc-500 tabular-nums"></span>
+                  <span id="jobNewCount" class="hidden text-[11px] text-emerald-500 tabular-nums">
+                    ⚡ <span id="jobNewCountVal"></span> nuevas
+                  </span>
                 </div>
               </div>
-            </div>
-
-            <!-- ── Barra de estadísticas ─────────────────────────────────── -->
-            <div class="shrink-0 bg-zinc-950 border-b border-zinc-800/60 px-5 py-2 flex items-center gap-3 flex-wrap">
-              <span id="jobResultsCount" class="text-[12px] font-semibold text-white tabular-nums"></span>
-              <span id="jobNewCount"     class="text-[11px] text-emerald-400 tabular-nums hidden">
-                ⚡ <span id="jobNewCountVal"></span> nuevas esta semana
-              </span>
-              <span class="ml-auto text-[11px] text-zinc-600 uppercase tracking-widest">Ordenado por fecha</span>
             </div>
 
             <!-- ── Lista de ofertas ───────────────────────────────────────── -->
@@ -1055,25 +1018,25 @@
         return String(str ?? "").replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;");
       }
 
-      // ─── Buscador estilo Remote Rocketship ───────────────────────────────
+      // ─── Buscador minimalista (arquitectura Remote Rocketship) ─────────
 
       // Cache local de todas las ofertas descargadas desde sent_jobs
       let localJobsCache    = [];
-      let _activeTimeFilter = 0;     // 0 = todas, 24/48/72 = últimas N horas
+      let _activeTimeFilter = 0;     // 0 = todas, 24/48/72/168 horas
       let _activeModeFilter = "all"; // "all" | "remote" | "hybrid"
 
       // Descarga todas las ofertas de sent_jobs y las guarda en localJobsCache
       async function fetchLiveJobs() {
         const container = document.getElementById("jobResultsContainer");
-        container.innerHTML = '<p class="text-xs text-zinc-600 py-8 text-center animate-pulse">Cargando ofertas…</p>';
+        container.innerHTML = '<p class="text-xs text-zinc-700 py-10 text-center animate-pulse">Cargando ofertas…</p>';
 
         // Resetear filtros al entrar a la vista
-        document.getElementById("jobSearchInput").value    = "";
-        document.getElementById("jobLocationInput").value  = "";
+        document.getElementById("jobSearchInput").value     = "";
+        document.getElementById("jobLocationInput").value   = "";
         document.getElementById("jobSeniorityFilter").value = "";
+        document.getElementById("jobTimeFilter").value      = "0";
         _activeTimeFilter = 0;
         _activeModeFilter = "all";
-        _updateTimeFilterUI(0);
         _updateModeFilterUI("all");
 
         try {
@@ -1092,46 +1055,33 @@
         }
       }
 
-      // Actualiza la barra de estadísticas superior
+      // Actualiza el contador de stats en la barra de filtros
       function _updateStatsBar(jobs) {
         const countEl  = document.getElementById("jobResultsCount");
         const newEl    = document.getElementById("jobNewCount");
         const newValEl = document.getElementById("jobNewCountVal");
         const weekCutoff = Date.now() - 7 * 86_400_000;
         const newCount   = jobs.filter(j => new Date(j.sent_at).getTime() >= weekCutoff).length;
-        if (countEl)  countEl.textContent  = `${jobs.length.toLocaleString("es-AR")} ofertas en total`;
+        if (countEl)  countEl.textContent  = `${jobs.length.toLocaleString("es-AR")} ofertas`;
         if (newValEl) newValEl.textContent = newCount.toLocaleString("es-AR");
         if (newEl)    newEl.classList.toggle("hidden", newCount === 0);
-      }
-
-      // Actualiza el estilo visual de los pills de tiempo
-      function _updateTimeFilterUI(hours) {
-        document.querySelectorAll(".time-filter-btn").forEach(btn => {
-          const active = btn.id === `timeBtn-${hours}`;
-          btn.classList.toggle("bg-zinc-700",     active);
-          btn.classList.toggle("text-zinc-200",   active);
-          btn.classList.toggle("border-zinc-600", active);
-          btn.classList.toggle("text-zinc-600",   !active);
-          btn.classList.toggle("border-zinc-800", !active);
-        });
       }
 
       // Actualiza el estilo visual de los pills de modalidad
       function _updateModeFilterUI(mode) {
         document.querySelectorAll(".mode-filter-btn").forEach(btn => {
           const active = btn.id === `modeBtn-${mode}`;
-          btn.classList.toggle("bg-indigo-600",    active);
-          btn.classList.toggle("text-white",        active);
-          btn.classList.toggle("border-indigo-500", active);
-          btn.classList.toggle("text-zinc-500",    !active);
-          btn.classList.toggle("border-zinc-700",  !active);
+          btn.classList.toggle("bg-zinc-700",     active);
+          btn.classList.toggle("text-zinc-200",   active);
+          btn.classList.toggle("border-zinc-600", active);
+          btn.classList.toggle("text-zinc-500",   !active);
+          btn.classList.toggle("border-zinc-800", !active);
         });
       }
 
-      // Cambia el filtro de tiempo activo y re-renderiza
-      function _setTimeFilter(hours) {
-        _activeTimeFilter = hours;
-        _updateTimeFilterUI(hours);
+      // Cambia el filtro de tiempo desde el select y re-renderiza
+      function _setTimeFilterFromSelect(val) {
+        _activeTimeFilter = Number(val);
         _filterJobs();
       }
 
