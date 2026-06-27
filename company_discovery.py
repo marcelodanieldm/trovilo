@@ -1,0 +1,273 @@
+"""
+company_discovery.py
+--------------------
+Descubre automáticamente empresas nuevas que publican ofertas en Greenhouse
+o Lever haciendo búsquedas con filtro site: en DuckDuckGo Lite via Playwright.
+
+Flujo:
+  1. Construye queries DDG Lite con site:boards.greenhouse.io y site:jobs.lever.co.
+  2. Navega con el browser stealth (anti-bot) y extrae los href de resultados.
+  3. Decodifica URLs de redirección de DDG (formato //duckduckgo.com/l/?uddg=...).
+  4. Aplica regex para aislar el company_id (primer segmento de path).
+  5. Retorna lista de dicts listos para insertar en target_companies.
+
+Uso:
+    from company_discovery import discover_new_ats_companies
+    companies = discover_new_ats_companies("QA")
+    # [{'company_name': 'vtex', 'ats_type': 'lever', 'ats_id': 'vtex'}, ...]
+"""
+import re
+import logging
+import time
+import random
+from urllib.parse import unquote, urlparse, parse_qs
+from playwright.sync_api import sync_playwright
+from browser import get_stealth_page
+
+log = logging.getLogger(__name__)
+
+# ---------------------------------------------------------------------------
+# Patrones de URL para cada ATS
+# ---------------------------------------------------------------------------
+
+# Greenhouse usa dos dominios: boards. (antiguo) y job-boards. (nuevo)
+_GH_RE = re.compile(
+    r'https?://(?:boards|job-boards)\.greenhouse\.io/([a-zA-Z0-9_-]+)',
+    re.IGNORECASE,
+)
+# Lever usa un único dominio canónico
+_LV_RE = re.compile(
+    r'https?://jobs\.lever\.co/([a-zA-Z0-9_-]+)',
+    re.IGNORECASE,
+)
+
+# UUID completo: Lever embebe IDs de oferta como primer segmento a veces
+_UUID_RE = re.compile(
+    r'^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$',
+    re.IGNORECASE,
+)
+
+# Segmentos que no representan company IDs
+_SKIP_SLUGS = frozenset({
+    '', 'jobs', 'embed', 'boards', 'board', 'api', 'v1', 'v2',
+    'search', 'login', 'logout', 'settings', 'privacy', 'terms',
+    'apply', 'careers', 'open-positions',
+})
+
+# ---------------------------------------------------------------------------
+# Configuración de queries
+# ---------------------------------------------------------------------------
+
+_DDG_LITE = "https://duckduckgo.com/lite/?q="
+
+def _build_queries(tech_keyword: str) -> list[tuple[str, str]]:
+    """
+    Genera pares (url_de_busqueda, ats_type) para el keyword dado.
+    Incluye ambos dominios de Greenhouse (boards. y job-boards.).
+    """
+    kw = tech_keyword.strip().replace(" ", "+")
+    return [
+        (
+            f'{_DDG_LITE}site%3Aboards.greenhouse.io+{kw}+%22Remote%22',
+            "greenhouse",
+        ),
+        (
+            f'{_DDG_LITE}site%3Ajob-boards.greenhouse.io+{kw}+%22Remote%22',
+            "greenhouse",
+        ),
+        (
+            f'{_DDG_LITE}site%3Ajobs.lever.co+{kw}+%22Remote%22',
+            "lever",
+        ),
+    ]
+
+# ---------------------------------------------------------------------------
+# Decodificación de URLs de DuckDuckGo
+# ---------------------------------------------------------------------------
+
+def _decode_ddg_href(href: str) -> str:
+    """
+    DDG Lite envuelve los links externos en una URL de redirección propia:
+      //duckduckgo.com/l/?uddg=https%3A%2F%2Fjobs.lever.co%2Fvtex&rut=...
+
+    Esta función extrae y decodifica la URL real del parámetro 'uddg'.
+    Si el href ya es una URL directa, la devuelve sin cambios.
+    """
+    if not href:
+        return ""
+
+    # Normalizar URLs que empiezan con //
+    if href.startswith("//"):
+        href = "https:" + href
+
+    if "duckduckgo.com/l/" in href:
+        try:
+            qs = parse_qs(urlparse(href).query)
+            uddg = qs.get("uddg", [""])[0]
+            if uddg:
+                return unquote(uddg)
+        except Exception:
+            pass
+
+    return href
+
+# ---------------------------------------------------------------------------
+# Extracción de company_id
+# ---------------------------------------------------------------------------
+
+def _extract_company_id(url: str, ats_type: str) -> str | None:
+    """
+    Aplica el regex correspondiente al ATS y devuelve el company_id si es válido.
+    Descarta slugs de sistema, UUIDs y valores puramente numéricos.
+
+    Ejemplos:
+        "https://boards.greenhouse.io/vercel/jobs/5999792004" → "vercel"
+        "https://jobs.lever.co/vtex/abc123-def4-..."         → "vtex"
+        "https://job-boards.greenhouse.io/stripe"            → "stripe"
+    """
+    pattern = _GH_RE if ats_type == "greenhouse" else _LV_RE
+    match   = pattern.search(url)
+    if not match:
+        return None
+
+    slug = match.group(1).lower().strip()
+
+    if slug in _SKIP_SLUGS:
+        return None
+    if slug.isdigit():
+        return None
+    if _UUID_RE.match(slug):
+        return None
+    if len(slug) < 2:
+        return None
+
+    return slug
+
+# ---------------------------------------------------------------------------
+# Scraping de resultados DDG Lite con Playwright
+# ---------------------------------------------------------------------------
+
+def _scrape_ddg_page(page, search_url: str, ats_type: str) -> list[str]:
+    """
+    Navega a la URL de DDG Lite y extrae los href de los resultados.
+    Detecta bloqueos (CAPTCHA / sin resultados) y registra advertencias.
+
+    Estrategia en capas:
+      1. Selector CSS: a.result-link
+      2. Fallback regex sobre el HTML crudo (captura incluso con JS desactivado)
+    """
+    try:
+        page.goto(search_url, wait_until="domcontentloaded", timeout=25_000)
+        # Espera aleatoria para imitar lectura humana
+        page.wait_for_timeout(random.randint(2_000, 4_000))
+    except Exception as exc:
+        log.warning("[discovery] Error navegando a DDG: %s", exc)
+        return []
+
+    html = page.content()
+
+    # Detección de bloqueos
+    lower_html = html.lower()
+    if any(token in lower_html for token in ("captcha", "bots use duckduckgo", "challenge")):
+        log.warning("[discovery] CAPTCHA / bloqueo detectado para: %s", search_url)
+        return []
+
+    hrefs: list[str] = []
+
+    # --- Capa 1: selector CSS ---
+    try:
+        link_els = page.query_selector_all("a.result-link")
+        for el in link_els:
+            raw = el.get_attribute("href") or ""
+            decoded = _decode_ddg_href(raw)
+            if decoded:
+                hrefs.append(decoded)
+    except Exception as exc:
+        log.debug("[discovery] Fallo selector CSS: %s", exc)
+
+    # --- Capa 2: regex sobre HTML crudo (fallback) ---
+    if not hrefs:
+        # Busca tanto URLs directas como redireccionadas por DDG
+        if ats_type == "greenhouse":
+            hrefs = re.findall(
+                r'href="((?:https?:)?//(?:[^"]*greenhouse\.io)[^"]*)"',
+                html,
+            )
+        else:
+            hrefs = re.findall(
+                r'href="((?:https?:)?//(?:[^"]*lever\.co)[^"]*)"',
+                html,
+            )
+        hrefs = [_decode_ddg_href(h) for h in hrefs]
+
+    log.debug("[discovery] %d href(s) extraídos de %s", len(hrefs), search_url)
+    return hrefs
+
+# ---------------------------------------------------------------------------
+# Función principal pública
+# ---------------------------------------------------------------------------
+
+def discover_new_ats_companies(tech_keyword: str = "QA") -> list[dict]:
+    """
+    Descubre empresas que publican ofertas en Greenhouse / Lever usando
+    búsquedas con filtro site: en DuckDuckGo Lite.
+
+    Para cada URL encontrada extrae el company_id (primer segmento del path),
+    que es el mismo slug que usan los endpoints públicos de las APIs:
+      - Greenhouse: boards-api.greenhouse.io/v1/boards/{ats_id}/jobs
+      - Lever:      api.lever.co/v0/postings/{ats_id}?mode=json
+
+    Parámetros:
+        tech_keyword: término de búsqueda adicional (ej. "QA", "Python", "React")
+
+    Retorna:
+        Lista de dicts únicos por ats_id:
+        [
+            {'company_name': 'vtex',   'ats_type': 'lever',      'ats_id': 'vtex'},
+            {'company_name': 'vercel', 'ats_type': 'greenhouse', 'ats_id': 'vercel'},
+            ...
+        ]
+    """
+    log.info("[discovery] Iniciando búsqueda — keyword: '%s'", tech_keyword)
+
+    queries      = _build_queries(tech_keyword)
+    seen_ids:  set[str]   = set()
+    results:   list[dict] = []
+
+    pw_ctx = sync_playwright().start()
+    try:
+        with get_stealth_page(pw_ctx) as (page, _ctx):
+            for idx, (search_url, ats_type) in enumerate(queries, start=1):
+                log.info(
+                    "[discovery] Query %d/%d [%s]: %s",
+                    idx, len(queries), ats_type, search_url,
+                )
+
+                hrefs = _scrape_ddg_page(page, search_url, ats_type)
+                log.info("[discovery]   → %d link(s) encontrado(s).", len(hrefs))
+
+                for href in hrefs:
+                    cid = _extract_company_id(href, ats_type)
+                    if cid and cid not in seen_ids:
+                        seen_ids.add(cid)
+                        results.append({
+                            "company_name": cid,
+                            "ats_type":     ats_type,
+                            "ats_id":       cid,
+                        })
+                        log.debug("[discovery]   + %s (%s)", cid, ats_type)
+
+                # Jitter entre queries para no sobrecargar DDG
+                if idx < len(queries):
+                    wait = random.uniform(5.0, 9.0)
+                    log.debug("[discovery] Esperando %.1f s antes de la siguiente query.", wait)
+                    time.sleep(wait)
+
+    finally:
+        try:
+            pw_ctx.stop()
+        except Exception:
+            pass
+
+    log.info("[discovery] Finalizado — %d empresa(s) nueva(s) encontrada(s).", len(results))
+    return results
