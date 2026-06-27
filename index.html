@@ -502,7 +502,7 @@
                 </select>
               </div>
 
-              <!-- Fila 2: modalidad pills + stats -->
+              <!-- Fila 2: modalidad pills + toggle exclusivas + stats -->
               <div class="flex items-center gap-1.5 flex-wrap">
                 <button id="modeBtn-all"    onclick="_setModeFilter('all')"
                   class="mode-filter-btn px-2.5 py-1 rounded-md text-[11px] border font-medium transition
@@ -513,6 +513,20 @@
                 <button id="modeBtn-hybrid" onclick="_setModeFilter('hybrid')"
                   class="mode-filter-btn px-2.5 py-1 rounded-md text-[11px] border font-medium transition
                          text-zinc-500 border-zinc-800 hover:border-zinc-600 hover:text-zinc-300">🏢 Híbrido</button>
+
+                <!-- Toggle exclusivas -->
+                <button id="exclusivasToggle" onclick="_toggleExclusivas()"
+                  class="flex items-center gap-1.5 px-2.5 py-1 rounded-md text-[11px] border font-medium transition
+                         text-zinc-500 border-zinc-800 hover:border-indigo-700 hover:text-indigo-300">
+                  <span id="exclusivasIcon" class="inline-block w-6 h-3.5 rounded-full border border-zinc-600 bg-zinc-700
+                         relative transition-colors duration-200">
+                    <span id="exclusivasThumb"
+                      class="absolute top-0.5 left-0.5 w-2.5 h-2.5 rounded-full bg-zinc-400
+                             transition-all duration-200"></span>
+                  </span>
+                  <span id="exclusivasLabel">✨ Solo exclusivas</span>
+                </button>
+
                 <div class="ml-auto flex items-center gap-2">
                   <span id="jobResultsCount" class="text-[11px] text-zinc-500 tabular-nums"></span>
                   <span id="jobNewCount" class="hidden text-[11px] text-emerald-500 tabular-nums">
@@ -1021,9 +1035,10 @@
       // ─── Buscador minimalista (arquitectura Remote Rocketship) ─────────
 
       // Cache local de todas las ofertas descargadas desde sent_jobs
-      let localJobsCache    = [];
-      let _activeTimeFilter = 0;     // 0 = todas, 24/48/72/168 horas
-      let _activeModeFilter = "all"; // "all" | "remote" | "hybrid"
+      let localJobsCache     = [];
+      let _activeTimeFilter  = 0;     // 0 = todas, 24/48/72/168 horas
+      let _activeModeFilter  = "all"; // "all" | "remote" | "hybrid"
+      let _soloExclusivas    = false; // true = mostrar solo not_on_linkedin === true
 
       // Descarga todas las ofertas de sent_jobs y las guarda en localJobsCache
       async function fetchLiveJobs() {
@@ -1037,12 +1052,14 @@
         document.getElementById("jobTimeFilter").value      = "0";
         _activeTimeFilter = 0;
         _activeModeFilter = "all";
+        _soloExclusivas   = false;
         _updateModeFilterUI("all");
+        _updateExclusivas(false);
 
         try {
           const { data, error } = await db
             .from("sent_jobs")
-            .select("title, company, job_url, sent_at")
+            .select("title, company, job_url, sent_at, not_on_linkedin")
             .order("sent_at", { ascending: false });
 
           if (error) throw error;
@@ -1077,6 +1094,35 @@
           btn.classList.toggle("text-zinc-500",   !active);
           btn.classList.toggle("border-zinc-800", !active);
         });
+      }
+
+      // Actualiza el estado visual del toggle de exclusivas
+      function _updateExclusivas(active) {
+        const icon  = document.getElementById("exclusivasIcon");
+        const thumb = document.getElementById("exclusivasThumb");
+        const label = document.getElementById("exclusivasLabel");
+        const btn   = document.getElementById("exclusivasToggle");
+        if (!icon) return;
+        icon.classList.toggle("bg-indigo-600",  active);
+        icon.classList.toggle("border-indigo-500", active);
+        icon.classList.toggle("bg-zinc-700",   !active);
+        icon.classList.toggle("border-zinc-600",!active);
+        thumb.classList.toggle("left-0.5",   !active);
+        thumb.classList.toggle("left-3",      active);
+        thumb.classList.toggle("bg-white",    active);
+        thumb.classList.toggle("bg-zinc-400", !active);
+        btn.classList.toggle("text-indigo-300",  active);
+        btn.classList.toggle("border-indigo-700",active);
+        btn.classList.toggle("text-zinc-500",   !active);
+        btn.classList.toggle("border-zinc-800", !active);
+        if (label) label.textContent = active ? "✨ Solo exclusivas" : "✨ Solo exclusivas";
+      }
+
+      // Activa / desactiva el filtro de exclusivas y re-renderiza
+      function _toggleExclusivas() {
+        _soloExclusivas = !_soloExclusivas;
+        _updateExclusivas(_soloExclusivas);
+        _filterJobs();
       }
 
       // Cambia el filtro de tiempo desde el select y re-renderiza
@@ -1143,6 +1189,11 @@
           };
           const re = seniorityMap[seniority];
           if (re) filtered = filtered.filter(j => re.test(j.title ?? ""));
+        }
+
+        // 6. Filtro de exclusivas (not_on_linkedin === true)
+        if (_soloExclusivas) {
+          filtered = filtered.filter(j => j.not_on_linkedin === true);
         }
 
         _renderJobList(filtered);
@@ -1227,6 +1278,12 @@
 
           const senBadge = seniority
             ? `<span class="shrink-0 text-[10px] px-1.5 py-0.5 rounded border font-medium leading-tight ${seniority.cls}">${seniority.label}</span>`
+            : "";
+
+          // Badge de exclusividad: se muestra cuando not_on_linkedin === true
+          const exclusivaBadge = job.not_on_linkedin === true
+            ? `<span class="shrink-0 text-[10px] px-1.5 py-0.5 rounded border font-medium leading-tight
+                          bg-indigo-950/60 text-indigo-300 border-indigo-800/70">🔒 No en LinkedIn</span>`
             : "";
 
           // Favicon de la empresa vía Google S2
