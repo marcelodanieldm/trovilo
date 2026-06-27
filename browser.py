@@ -115,13 +115,13 @@ def get_stealth_page(playwright: Playwright):
     # Seleccionar un User-Agent distinto en cada sesión
     user_agent = random.choice(_USER_AGENTS)
 
-    # Lanzar el Chromium bundled de Playwright (más liviano y estable que
-    # channel="chrome" en Windows headless). Para DDG Lite, que es HTML puro
-    # sin JS pesado, el Chromium estándar es suficiente y no recibe CAPTCHAs.
+    # Lanzar el Chromium bundled de Playwright.
+    # NOTA: --disable-blink-features=AutomationControlled lo agrega Playwright
+    # por defecto — no se repite aquí para evitar que Chrome rechace el
+    # argumento duplicado y cierre el contexto antes de new_page().
     browser = playwright.chromium.launch(
         headless=True,
         args=[
-            "--disable-blink-features=AutomationControlled",
             "--no-sandbox",
             "--disable-dev-shm-usage",
             "--disable-infobars",

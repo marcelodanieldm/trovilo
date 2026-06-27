@@ -19,10 +19,12 @@ Funciones principales:
 Ambas devuelven: [{'title': str, 'company': str, 'url': str}, ...]
 """
 import time
+import re
 import random
+import requests
 from urllib.parse import urlparse, parse_qs, unquote, quote_plus
 from playwright.sync_api import sync_playwright, Page
-from browser import get_stealth_page
+from browser import get_stealth_page, get_organic_headers
 from cleaners import clean_google_result, clean_and_verify_results
 
 # Dominios ATS válidos — se usan para filtrar resultados de búsqueda
@@ -290,29 +292,44 @@ def scrape_jobs_via_duckduckgo(
     query = _build_query(tech, location, job_type)
     url   = f"{_DDG_LITE_URL}{quote_plus(query)}"
 
-    results: list[dict] = []
+    # DDG Lite es HTML puro — no necesita JavaScript ni navegador.
+    # requests es suficiente: más rápido, sin ERR_INSUFFICIENT_RESOURCES
+    # de Chromium en Windows, y funciona directamente en GitHub Actions.
+    headers = {
+        **get_organic_headers(),
+        "Referer": "https://duckduckgo.com/",
+    }
 
-    # sync_playwright() como context manager garantiza que el proceso del
-    # browser se cierra completamente al salir del bloque, flushándose
-    # cookies, localStorage y sessionStorage sin necesidad de llamadas
-    # explícitas a context.clear_cookies() o storage_state().
-    with sync_playwright() as pw:
-        with get_stealth_page(pw) as (page, _ctx):
+    try:
+        resp = requests.get(url, headers=headers, timeout=20)
+    except requests.RequestException:
+        time.sleep(random.uniform(5.2, 10.7))
+        return []
 
-            # Navegación directa: sin tipeo, sin JS pesado, sin fingerprinting
-            page.goto(url, wait_until="domcontentloaded", timeout=30_000)
+    # Detectar CAPTCHA o página de error de DDG
+    body = resp.text
+    if resp.status_code != 200 or "challenge" in body.lower() or "bots use duckduckgo" in body.lower():
+        time.sleep(random.uniform(5.2, 10.7))
+        return []
 
-            # Movimiento de mouse y micro-scroll antes de leer el DOM
-            simulate_human_behavior(page)
+    # Extraer <a class="result-link" href="...">Título</a>
+    raw_jobs: list[dict] = []
+    for href, raw_title in re.findall(
+        r'<a class="result-link" href="([^"]+)">([^<]+)</a>', body
+    ):
+        if not _is_job_url(href):
+            continue
+        import html as _html
+        title = _html.unescape(raw_title).strip()
+        if len(title) < 4:
+            continue
+        parsed = clean_google_result(title, href)
+        raw_jobs.append({"title": parsed["title"], "company": parsed["company"], "url": href})
 
-            results = _extract_results_ddg_lite(page)
-
-    # El browser ya cerró — el jitter corre sin recursos de red activos.
-    # random.uniform(5.2, 10.7) da una ventana amplia para evadir detección
-    # de patrones de timing regulares.
+    # Jitter post-request para enfriar la IP entre batches consecutivos
     time.sleep(random.uniform(5.2, 10.7))
 
-    return results
+    return clean_and_verify_results(raw_jobs)
 
 
 def scrape_jobs_via_google(
