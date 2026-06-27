@@ -23,7 +23,7 @@ import logging
 from dotenv import load_dotenv
 from playwright.sync_api import sync_playwright
 from browser import get_stealth_page
-from scraper import run_massive_scraping
+from scraper import execute_unbreakable_scraping
 from notifier import supabase, bulk_filter_and_save, process_and_notify, notify_no_results
 
 # ---------------------------------------------------------------------------
@@ -115,7 +115,7 @@ def run() -> None:
 
             # a. Scraping masivo sobre todos los lotes de dominios
             try:
-                jobs = run_massive_scraping(page, tech, location, job_type)
+                jobs = execute_unbreakable_scraping(page, tech, location, job_type)
                 log.info("Filtro %d — %d oferta(s) encontrada(s) en total.", idx, len(jobs))
             except Exception as e:
                 log.error("Filtro %d — error durante el scraping: %s", idx, e)

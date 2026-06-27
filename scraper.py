@@ -19,9 +19,9 @@ import time
 import random
 import re
 import logging
-from urllib.parse import urlparse
+from urllib.parse import urlparse, quote_plus
 from playwright.sync_api import Page
-from query_builder import build_duckduckgo_query, generate_query_batches
+from query_builder import build_duckduckgo_query, generate_query_batches, generate_duckduckgo_batches
 
 # Logger del módulo — emite a stdout para que GitHub Actions lo capture
 logging.basicConfig(
@@ -271,22 +271,94 @@ def run_massive_scraping(
 
 
 # ---------------------------------------------------------------------------
-# Funciones públicas (mantienen la misma interfaz que antes)
+# Scraping masivo indestructible — navega por URL directa
 # ---------------------------------------------------------------------------
+
+def execute_unbreakable_scraping(
+    page: Page,
+    tech: str,
+    location: str,
+    job_type: str,
+) -> list[dict]:
+    """
+    Scraping masivo resistente a fallos. Por cada lote de query_builder:
+      1. Construye la URL directa: https://html.duckduckgo.com/html/?q={query}
+      2. Navega directamente (sin rellenar formulario — más estable)
+      3. Extrae resultados de página 1 y página 2 si existe botón "Next"
+      4. Si el batch falla por timeout o error de parsing → log.warning + continue
+      5. Jitter de 3-6 s al final de cada batch (firma humana)
+
+    Ventaja sobre run_massive_scraping: al navegar por URL directa evita
+    depender del selector del formulario de DDG, que puede cambiar.
+    """
+    batches   = list(generate_duckduckgo_batches(tech, location, job_type))
+    jobs: list[dict] = []
+    seen_urls: set[str] = set()
+    total = len(batches)
+
+    log.info(
+        "execute_unbreakable_scraping — %d lotes | tech='%s' location='%s' job_type='%s'",
+        total, tech, location, job_type,
+    )
+
+    for idx, query in enumerate(batches, start=1):
+        encoded_url = f"https://html.duckduckgo.com/html/?q={quote_plus(query)}"
+        log.info("Batch %d/%d — %d chars", idx, total, len(query))
+
+        try:
+            page.goto(encoded_url, wait_until="domcontentloaded", timeout=30_000)
+            time.sleep(random.uniform(1.0, 2.0))
+
+            # Página 1
+            before = len(jobs)
+            jobs.extend(_extract_results_from_page(page, seen_urls))
+            log.info("Batch %d — página 1: %d ofertas nuevas", idx, len(jobs) - before)
+
+            # Página 2 si existe botón "Next"
+            next_btn = page.query_selector(".nav-link form")
+            if next_btn:
+                try:
+                    next_btn.evaluate("form => form.submit()")
+                    page.wait_for_load_state("domcontentloaded", timeout=20_000)
+                    time.sleep(random.uniform(1.0, 2.0))
+                    before2 = len(jobs)
+                    jobs.extend(_extract_results_from_page(page, seen_urls))
+                    log.info("Batch %d — página 2: %d ofertas nuevas", idx, len(jobs) - before2)
+                except Exception as e:
+                    log.warning("Batch %d: error en página 2 — %s", idx, e)
+
+        except Exception as e:
+            log.warning(
+                "Batch %d falló (%s: %s) — continuando con el siguiente.",
+                idx, type(e).__name__, e,
+            )
+            continue
+
+        finally:
+            # Jitter anti-bot entre batches (siempre, incluso si falló)
+            if idx < total:
+                sleep_s = random.uniform(3.0, 6.0)
+                log.info("Batch %d completado. Durmiendo %.1fs.", idx, sleep_s)
+                time.sleep(sleep_s)
+
+    log.info("execute_unbreakable_scraping — %d ofertas únicas encontradas.", len(jobs))
+    return jobs
+
+
+
 
 def scrape_ats_with_page(page: Page, tech: str, location: str, job_type: str) -> list[dict]:
     """
-    Wrapper público que delega en run_massive_scraping.
-    Mantiene la misma firma para no romper main.py.
+    Wrapper público que delega en execute_unbreakable_scraping.
     Si job_type tiene múltiples valores (ej. "remote,hybrid"),
-    ejecuta un scraping masivo por cada modalidad.
+    ejecuta un scraping por cada modalidad con jitter entre ellas.
     """
     types = [t.strip() for t in job_type.split(",") if t.strip()]
     all_jobs: list[dict] = []
     seen: set[str] = set()
 
     for jt in types:
-        results = run_massive_scraping(page, tech, location, jt)
+        results = execute_unbreakable_scraping(page, tech, location, jt)
         for job in results:
             if job["url"] not in seen:
                 seen.add(job["url"])
