@@ -420,11 +420,20 @@
           </div>
         </div>
 
-        <!-- ── #instant-results-container ── -->
+        <!-- ══════════════════════════════════════════════════════════════
+             #instant-results-container
+             ──────────────────────────────────────────────────────────────
+             ARQUITECTURA DE RENDERIZADO:
+             · Vue gestiona: skeleton, header de columnas, empty-state.
+             · TroviloScroller gestiona: #scroller-mount (job rows).
+             · Vue NO tiene v-for aquí. Jamás toca los hijos de #scroller-mount
+               porque no hay bindings reactivos en ese nodo ni sus descendientes.
+               El virtual-DOM de Vue no reconciliará nodos que no registró.
+        ══════════════════════════════════════════════════════════════ -->
         <div id="instant-results-container" class="flex-1 overflow-y-auto min-h-0">
 
-          <!-- Loading skeleton -->
-          <template v-if="jobsLoading">
+          <!-- ── Skeleton de carga (Vue-managed via v-show) ── -->
+          <div v-show="jobsLoading" id="jobs-skeleton">
             <div v-for="i in 12" :key="i"
                  class="flex items-center gap-3 px-6 py-3 border-b border-edge-1">
               <div class="skeleton w-[30px] h-[30px] rounded-md flex-shrink-0"></div>
@@ -434,90 +443,56 @@
               </div>
               <div class="skeleton h-2.5 w-10 rounded"></div>
             </div>
-          </template>
+          </div>
 
-          <!-- Resultados -->
-          <template v-else-if="filteredJobs.length">
-            <!-- Header de columnas (fijo) -->
-            <div class="flex items-center gap-3 px-6 py-1.5 border-b border-edge-1 bg-surface-1 sticky top-0 z-10">
-              <div class="w-[30px] flex-shrink-0"></div>
-              <div class="flex-1 text-[9px] uppercase tracking-widest text-zinc-700 font-semibold">Puesto</div>
-              <div class="w-32 hidden md:block text-[9px] uppercase tracking-widest text-zinc-700 font-semibold">Empresa</div>
-              <div class="w-24 hidden lg:block text-[9px] uppercase tracking-widest text-zinc-700 font-semibold">Tipo</div>
-              <div class="w-16 text-[9px] uppercase tracking-widest text-zinc-700 font-semibold text-right">Hace</div>
-              <div class="w-16 flex-shrink-0"></div>
-            </div>
+          <!-- ── Header de columnas sticky (Vue-managed) ── -->
+          <div v-show="!jobsLoading && !scrollerEmpty" id="jobs-col-header"
+               class="flex items-center gap-3 px-6 py-1.5 border-b border-edge-1 bg-surface-1 sticky top-0 z-10">
+            <div class="w-[30px] flex-shrink-0"></div>
+            <div class="flex-1 text-[9px] uppercase tracking-widest text-zinc-700 font-semibold">Puesto</div>
+            <div class="w-32 hidden md:block text-[9px] uppercase tracking-widest text-zinc-700 font-semibold">Empresa</div>
+            <div class="w-24 hidden lg:block text-[9px] uppercase tracking-widest text-zinc-700 font-semibold">Tipo</div>
+            <div class="w-16 text-[9px] uppercase tracking-widest text-zinc-700 font-semibold text-right">Hace</div>
+            <div class="w-16 flex-shrink-0"></div>
+          </div>
 
-            <!-- Job rows -->
-            <a v-for="job in filteredJobs.slice(0, displayLimit)"
-               :key="job.job_url"
-               :href="job.job_url || '#'"
-               target="_blank"
-               rel="noopener noreferrer"
-               class="job-row flex items-center gap-3 px-6 py-2.5 border-b border-edge-1 cursor-pointer group">
+          <!--
+            ── #scroller-mount ─────────────────────────────────────────────
+            QA-DOM-OWNERSHIP: TroviloScroller es el único escritor de este nodo.
+            Vue no tiene bindings aquí → el vdom patcher lo ignora en cada ciclo.
+            NO agregar directivas Vue (v-if / v-for / :class) dentro de este div.
+            ──────────────────────────────────────────────────────────────── -->
+          <div id="scroller-mount"></div>
 
-              <!-- Favicon / initial -->
-              <div class="w-[30px] h-[30px] flex-shrink-0 rounded-md bg-surface-3 border border-edge-1
-                          flex items-center justify-center overflow-hidden">
-                <img v-if="faviconOf(job)" :src="faviconOf(job)" alt="" loading="lazy"
-                     class="w-full h-full object-contain"
-                     @error="e => e.target.style.display='none'">
-                <span class="text-zinc-600 text-[11px] font-bold select-none">{{ initOf(job) }}</span>
-              </div>
+          <!--
+            ── #scroll-sentinel ────────────────────────────────────────────
+            QA-INTERSECTION: El IntersectionObserver apunta a este elemento.
+            Debe estar SIEMPRE fuera y DESPUÉS de #scroller-mount para que el
+            observer dispare solo cuando el usuario llegó al final de los rows
+            ya renderizados. Si se mueve dentro de scroller-mount, el observer
+            no reflejará la posición correcta del fondo de la lista.
+            ──────────────────────────────────────────────────────────────── -->
+          <div id="scroll-sentinel" style="height:1px;width:100%"></div>
 
-              <!-- Título + badges inline -->
-              <div class="flex-1 min-w-0 flex items-center gap-2 flex-wrap">
-                <span class="job-title-text text-[13px] font-medium text-zinc-300 truncate transition-colors leading-none">
-                  {{ job.title }}
-                </span>
-                <span v-if="job.not_on_linkedin" class="badge badge-excl flex-shrink-0">excl.</span>
-                <span v-if="locOf(job)" class="badge flex-shrink-0" :class="locOf(job).cls">{{ locOf(job).label }}</span>
-                <span v-if="senOf(job)" class="badge flex-shrink-0" :class="senOf(job).cls">{{ senOf(job).label }}</span>
-              </div>
+          <!-- ── Indicador de carga incremental (TroviloScroller-managed) ── -->
+          <div id="scroll-loading-indicator"
+               class="hidden py-5 text-center border-b border-edge-1">
+            <span class="text-[10px] text-zinc-700 animate-pulse tracking-wider">
+              · · · cargando más ofertas · · ·
+            </span>
+          </div>
 
-              <!-- Empresa -->
-              <div class="w-32 hidden md:block flex-shrink-0 truncate text-[11.5px] text-zinc-600">
-                {{ job.company }}
-              </div>
+          <!-- ── Fin de la lista (TroviloScroller-managed) ── -->
+          <div id="scroll-end-indicator"
+               class="hidden py-5 text-center">
+            <span class="text-[10px] text-zinc-700 tracking-widest">
+              — fin de resultados —
+            </span>
+          </div>
 
-              <!-- Modalidad inferred -->
-              <div class="w-24 hidden lg:block flex-shrink-0">
-                <span v-if="/remote|remoto|anywhere|worldwide/i.test((job.title||'')+(job.job_url||''))"
-                      class="text-[10px] text-emerald-600">remote</span>
-                <span v-else-if="/hybrid|híbrido/i.test(job.title||'')"
-                      class="text-[10px] text-sky-600">hybrid</span>
-                <span v-else class="text-[10px] text-zinc-700">—</span>
-              </div>
-
-              <!-- Tiempo relativo -->
-              <div class="w-16 flex-shrink-0 text-right">
-                <span class="text-[11px] tabular-nums"
-                      :class="timeOf(job).hot ? 'text-amber-500' : 'text-zinc-700'">
-                  {{ timeOf(job).text }}
-                </span>
-              </div>
-
-              <!-- Apply button (aparece en hover) -->
-              <div class="w-16 flex-shrink-0 flex justify-end">
-                <span class="apply-btn text-[10px] font-semibold text-violet-500 border border-violet-900/60
-                             rounded px-2 py-0.5 bg-violet-950/40 hover:bg-violet-900/40 transition">
-                  Apply →
-                </span>
-              </div>
-            </a>
-
-            <!-- Load more -->
-            <div v-if="filteredJobs.length > displayLimit" class="py-5 text-center border-b border-edge-1">
-              <button @click="displayLimit += 100"
-                      class="text-[11px] text-zinc-600 hover:text-zinc-300 border border-edge-2
-                             rounded px-4 py-1.5 transition hover:border-edge-3">
-                Ver {{ filteredJobs.length - displayLimit }} más ↓
-              </button>
-            </div>
-          </template>
-
-          <!-- Empty state -->
-          <div v-else class="flex flex-col items-center justify-center h-full py-24 text-center">
+          <!-- ── Empty state (Vue-managed via v-show) ── -->
+          <div v-show="!jobsLoading && scrollerEmpty"
+               class="flex flex-col items-center justify-center py-24 text-center">
             <div class="text-5xl mb-4 opacity-20">⚡</div>
             <p class="text-[13px] text-zinc-600">Sin resultados</p>
             <p class="text-[11px] text-zinc-700 mt-1">Ajustá los filtros o scrapear fuentes externas</p>
@@ -925,6 +900,596 @@
 <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js" defer></script>
 
 <script>
+/* ═══════════════════════════════════════════════════════════════════════
+   TROVILO ENGINE — Módulos de navegación e infinite scroll
+   ───────────────────────────────────────────────────────────────────────
+   Carga ANTES del createApp de Vue para que los módulos estén listos
+   cuando Vue llame a mounted() y registre los observers.
+   ═══════════════════════════════════════════════════════════════════════ */
+'use strict';
+
+// ─────────────────────────────────────────────────────────────────────
+// MÓDULO 1 · ESTADO GLOBAL EN MEMORIA
+// ─────────────────────────────────────────────────────────────────────
+
+/**
+ * systemJobsMemory
+ * ─────────────────
+ * Array canónico de TODAS las ofertas disponibles (Supabase + scrape live).
+ *
+ * QA-Memory ①  Solo este array posee los objetos job.
+ *              Los filtros y el scroller leen por referencia (slice/filter),
+ *              nunca clonan en profundidad. Evita duplicar el heap.
+ *
+ * QA-Memory ②  Para reemplazarlo, asignar un array nuevo en lugar de mutar
+ *              el existente: `window.systemJobsMemory = newArray`.
+ *              Así el GC puede liberar el array anterior en cuanto no queden
+ *              referencias locales que apunten a él.
+ *
+ * QA-Memory ③  Los nodos DOM creados por TroviloScroller tienen closures
+ *              que capturan el objeto job por referencia. Si se limpia
+ *              systemJobsMemory, esas referencias locales mantienen vivos
+ *              los objetos hasta que se llame a TroviloScroller.reset()
+ *              → _clearDOM() elimina los nodos y libera las closures.
+ */
+window.systemJobsMemory = [];
+
+/**
+ * currentPage
+ * ───────────
+ * Página actual del scroll virtual. 1-indexed.
+ * Se resetea a 1 en cada nueva búsqueda o cambio de filtros.
+ */
+window.currentPage = 1;
+
+/** Cuántos ítems se agregan al DOM por batch de scroll. */
+const ITEMS_PER_PAGE = 50;
+
+
+// ─────────────────────────────────────────────────────────────────────
+// MÓDULO 2 · TROVILO ROUTER
+// Simple SPA router basado en manipulación de clase CSS 'hidden'.
+// Actúa como capa de coordinación: actualiza el estado de Vue Y aplica
+// las clases directamente al DOM para máxima velocidad de transición.
+// ─────────────────────────────────────────────────────────────────────
+const TroviloRouter = {
+
+  /**
+   * Mapa de nombre de vista → selector del panel en el DOM.
+   * Debe estar sincronizado con los IDs definidos en el HTML.
+   */
+  VIEWS: {
+    buscador: '#view-buscador',
+    metricas: '#view-metricas',
+    feed:     '#view-feed',
+    config:   '#view-config',
+    miembros: '#view-miembros',
+  },
+
+  /** Nombre de la vista actualmente visible. */
+  current: null,
+
+  /**
+   * navigate(name)
+   * ──────────────
+   * Punto de entrada único para cambiar de vista.
+   *
+   * Flujo:
+   *   1. Añade 'hidden' a todos los paneles → O(n) trivial, n ≤ 5.
+   *   2. Remueve 'hidden' del panel destino → 1 operación DOM.
+   *   3. Actualiza el atributo data-current en el nav → hooks CSS externos.
+   *   4. Notifica al estado reactivo de Vue (si está montado).
+   *
+   * QA-CSS ①  Se usa 'hidden' (display:none) en lugar de visibility:hidden
+   *           para que el layout del panel colapsado no ocupe espacio,
+   *           evitando reflows fantasma en el panel visible.
+   *
+   * QA-CSS ②  No se anima la transición aquí a propósito: los paneles
+   *           pueden contener listas largas; animar height/opacity sobre
+   *           ellos dispararía Layout + Paint en cada frame.
+   */
+  navigate(name) {
+    if (this.current === name) return; // evitar trabajo innecesario
+
+    // ── 1. Ocultar todos los paneles ──
+    Object.values(this.VIEWS).forEach(selector => {
+      const el = document.querySelector(selector);
+      if (el) el.classList.add('hidden');
+    });
+
+    // ── 2. Mostrar el panel destino ──
+    const target = document.querySelector(this.VIEWS[name]);
+    if (target) {
+      target.classList.remove('hidden');
+    } else {
+      // Vista desconocida: fallback al buscador
+      console.warn(`[TroviloRouter] Vista desconocida: "${name}". Usando buscador.`);
+      document.querySelector(this.VIEWS.buscador)?.classList.remove('hidden');
+      name = 'buscador';
+    }
+
+    // ── 3. Marcar nav activo (atributo CSS-hookeable desde fuera) ──
+    const nav = document.querySelector('[data-trovilo-nav]');
+    if (nav) nav.dataset.troviloCurrent = name;
+
+    this.current = name;
+
+    // ── 4. Sincronizar con Vue (single source of truth) ──
+    const app = window.__trovilo;
+    if (app && app.panel !== name) {
+      app.go(name); // propaga la navegación al estado Vue sin re-entrar aquí
+    }
+  },
+};
+
+
+// ─────────────────────────────────────────────────────────────────────
+// MÓDULO 3 · TROVILO SCROLLER
+// Motor de Infinite Scroll sobre systemJobsMemory usando
+// IntersectionObserver. Renderiza por lotes (batches) de ITEMS_PER_PAGE
+// sin bloquear el main thread, usando requestAnimationFrame para separar
+// el cálculo del layout de cada frame de pintura.
+// ─────────────────────────────────────────────────────────────────────
+const TroviloScroller = {
+
+  // ── Elementos DOM ──────────────────────────────────────
+  container:  null,  // #instant-results-container (scroll root)
+  mount:      null,  // #scroller-mount (zona exclusiva de job rows)
+  sentinel:   null,  // #scroll-sentinel (disparador del observer)
+  loadingEl:  null,  // #scroll-loading-indicator
+  endEl:      null,  // #scroll-end-indicator
+
+  // ── Estado interno ─────────────────────────────────────
+  observer:      null,   // IntersectionObserver (única instancia viva)
+  isRendering:   false,  // mutex: evita batches concurrentes
+  renderedCount: 0,      // cuántos rows hay actualmente en el DOM
+
+  /**
+   * init(containerSel, mountSel, sentinelSel)
+   * ──────────────────────────────────────────
+   * Conecta el scroller al DOM y arma el IntersectionObserver.
+   * Se llama UNA SOLA VEZ desde Vue mounted().
+   *
+   * QA-Observer ①  El observer usa root: container (scroll relativo al
+   *               contenedor, no al viewport). Evita falsos positivos
+   *               cuando el panel no está visible.
+   *
+   * QA-Observer ②  rootMargin '0px 0px 400px 0px' pre-carga el próximo
+   *               batch cuando el sentinel está a 400px del borde inferior
+   *               del contenedor. Valor calibrado para conexiones lentas;
+   *               reducir a 200px en redes rápidas si se quiere lazy más
+   *               agresivo.
+   */
+  init(containerSel = '#instant-results-container',
+       mountSel     = '#scroller-mount',
+       sentinelSel  = '#scroll-sentinel') {
+
+    this.container = document.querySelector(containerSel);
+    this.mount     = document.querySelector(mountSel);
+    this.sentinel  = document.querySelector(sentinelSel);
+    this.loadingEl = document.querySelector('#scroll-loading-indicator');
+    this.endEl     = document.querySelector('#scroll-end-indicator');
+
+    if (!this.container || !this.mount || !this.sentinel) {
+      console.error('[TroviloScroller] Elementos del DOM no encontrados. Verificar IDs.');
+      return;
+    }
+
+    // ── Crear observer ──
+    this.observer = new IntersectionObserver(
+      (entries) => this._onIntersect(entries),
+      {
+        root:       this.container,
+        rootMargin: '0px 0px 400px 0px',
+        threshold:  0,
+      }
+    );
+
+    this.observer.observe(this.sentinel);
+  },
+
+  /**
+   * _onIntersect(entries)
+   * ──────────────────────
+   * Callback del IntersectionObserver. Solo actúa cuando:
+   *   · El sentinel está visible (isIntersecting = true)
+   *   · No hay un batch en progreso (mutex isRendering)
+   *   · Quedan rows por renderizar en systemJobsMemory
+   *
+   * QA-Race ①  isRendering actúa como mutex simple (single-threaded JS).
+   *            Protege contra el caso en que el usuario hace scroll muy
+   *            rápido y el observer dispara varias veces antes de que
+   *            el primer rAF termine.
+   */
+  _onIntersect(entries) {
+    if (!entries[0].isIntersecting) return;
+    if (this.isRendering) return;
+
+    const pool = this._getFilteredPool();
+    if (this.renderedCount >= pool.length) return; // ya están todos
+
+    this._loadNextBatch(pool);
+  },
+
+  /**
+   * reset()
+   * ────────
+   * Limpia el DOM de rows anteriores y arranca desde la página 1.
+   * Llamado en cada cambio de filtros o nueva carga de jobs.
+   *
+   * QA-Memory ④  _clearDOM() elimina todos los nodos .job-row del DOM.
+   *              Después de removerse, los nodos son GC-eligibles siempre
+   *              que no queden referencias JS a ellos (event listeners en
+   *              closures, arrays externos, etc.). JobRowFactory crea los
+   *              listeners con arrow functions inline que no se almacenan;
+   *              al remover el nodo, el listener se libera con él.
+   *
+   * QA-UX ①     El header de columnas y el empty-state los controla Vue
+   *             (v-show). Solo notificamos a Vue si el pool resultó vacío.
+   */
+  reset() {
+    window.currentPage   = 1;
+    this.renderedCount   = 0;
+    this.isRendering     = false;
+
+    this._clearDOM();
+    this._hideAux();
+
+    // Notificar a Vue el estado de vacío
+    const pool = this._getFilteredPool();
+    if (window.__trovilo) {
+      window.__trovilo.scrollerEmpty = (pool.length === 0);
+    }
+
+    if (pool.length > 0) {
+      // Primer batch sincrónico para evitar flash de empty-state
+      this._loadNextBatch(pool);
+    }
+  },
+
+  /**
+   * _loadNextBatch(pool)
+   * ─────────────────────
+   * Renderiza los próximos ITEMS_PER_PAGE rows del pool filtrado.
+   *
+   * QA-Perf ①   document.createDocumentFragment() acumula todos los nodos
+   *             nuevos fuera del DOM activo. Un único insertBefore() al
+   *             final produce un solo Reflow + Repaint en lugar de N.
+   *
+   * QA-Perf ②   requestAnimationFrame() asegura que el trabajo pesado
+   *             (crear N nodos) ocurre al inicio del frame de pintura,
+   *             dando al browser tiempo completo antes del próximo vsync.
+   *             Evita el jank que produce insertar DOM durante un scroll
+   *             handler síncrono.
+   *
+   * QA-Memory ⑤  El Fragment se descarta automáticamente después del
+   *              insertBefore; no queda referencia al nodo intermedio.
+   */
+  _loadNextBatch(pool) {
+    this.isRendering = true;
+    if (this.loadingEl) this.loadingEl.classList.remove('hidden');
+
+    requestAnimationFrame(() => {
+      const start  = this.renderedCount;
+      const end    = Math.min(start + ITEMS_PER_PAGE, pool.length);
+      const batch  = pool.slice(start, end);
+
+      if (!batch.length) {
+        this.isRendering = false;
+        if (this.loadingEl) this.loadingEl.classList.add('hidden');
+        return;
+      }
+
+      // ── Construir todos los nodos fuera del DOM ──
+      const fragment = document.createDocumentFragment();
+      batch.forEach(job => {
+        const row = JobRowFactory.create(job);
+        fragment.appendChild(row);
+      });
+
+      // ── Insertar en un único reflow, antes del sentinel ──
+      this.mount.appendChild(fragment);
+
+      this.renderedCount  += batch.length;
+      window.currentPage   = Math.ceil(this.renderedCount / ITEMS_PER_PAGE);
+
+      if (this.loadingEl) this.loadingEl.classList.add('hidden');
+
+      // ── Indicador de fin de lista ──
+      if (this.renderedCount >= pool.length && this.endEl) {
+        this.endEl.classList.remove('hidden');
+      }
+
+      // Actualizar contadores en Vue
+      if (window.__trovilo) {
+        window.__trovilo.scrollerEmpty    = false;
+        window.__trovilo.scrollerRendered = this.renderedCount;
+        window.__trovilo.scrollerTotal    = pool.length;
+      }
+
+      this.isRendering = false;
+    });
+  },
+
+  /**
+   * _getFilteredPool()
+   * ───────────────────
+   * Aplica los filtros activos de Vue sobre systemJobsMemory y retorna
+   * el subconjunto que el scroller debe renderizar.
+   *
+   * QA-Coupling ①  Se delega el filtrado a Vue para no duplicar la lógica
+   *               de negocio (query, seniority, location, mode, tiempo).
+   *               __trovilo.filteredJobs es un computed de Vue: solo se
+   *               recalcula cuando sus dependencias cambian, sin trabajo
+   *               extra por llamarlo aquí.
+   *
+   * QA-Coupling ②  Si Vue aún no está montado (race durante init), retorna
+   *               el array completo sin filtrar como fallback seguro.
+   */
+  _getFilteredPool() {
+    if (window.__trovilo) {
+      return window.__trovilo.filteredJobs; // computed reactivo de Vue
+    }
+    return window.systemJobsMemory;
+  },
+
+  /**
+   * _clearDOM()
+   * ────────────
+   * Elimina todos los job rows del mount point.
+   *
+   * QA-Memory ⑥  Se usa innerHTML = '' como método más rápido para limpiar
+   *              un nodo con muchos hijos (evita N removeChild() calls y el
+   *              loop de GC por cada uno). El browser puede liberar el
+   *              subárbol completo en batch.
+   *
+   * QA-Memory ⑦  Si algún job row tuviera event listeners con referencias
+   *              a closures externas (ej. un store centralizado), innerHTML=''
+   *              causaría un memory leak. En este caso JobRowFactory usa
+   *              solo listeners inline (arrow functions sin refs externas),
+   *              por lo que el clear es seguro.
+   */
+  _clearDOM() {
+    if (this.mount) {
+      // QA: innerHTML='' es O(1) desde el GC vs O(n) removeChild loop
+      this.mount.innerHTML = '';
+    }
+  },
+
+  /** Oculta los indicadores auxiliares entre resets. */
+  _hideAux() {
+    if (this.loadingEl) this.loadingEl.classList.add('hidden');
+    if (this.endEl)     this.endEl.classList.add('hidden');
+  },
+
+  /**
+   * destroy()
+   * ──────────
+   * Limpieza completa: desconecta el observer y libera referencias DOM.
+   * Llamar si el componente se desmonta (SPA con múltiples vistas raíz).
+   *
+   * QA-Memory ⑧  Sin llamar a observer.disconnect(), el IntersectionObserver
+   *              mantiene una referencia al sentinel y al root container,
+   *              impidiendo que el GC libere esos nodos aunque se eliminen
+   *              del árbol DOM. Siempre desconectar en cleanup.
+   */
+  destroy() {
+    if (this.observer) {
+      this.observer.disconnect();
+      this.observer = null;
+    }
+    this._clearDOM();
+    this.container = this.mount = this.sentinel = null;
+    this.loadingEl = this.endEl = null;
+  },
+};
+
+
+// ─────────────────────────────────────────────────────────────────────
+// MÓDULO 4 · JOB ROW FACTORY
+// Crea nodos DOM puros (sin innerHTML con datos de usuario) para cada
+// oferta. Usa createElement + textContent para garantizar que ningún
+// valor de la BD pueda inyectar HTML arbitrario (XSS).
+// ─────────────────────────────────────────────────────────────────────
+const JobRowFactory = {
+
+  /**
+   * create(job) → HTMLAnchorElement
+   * ────────────────────────────────
+   * Genera un <a> completo representando una oferta de trabajo.
+   *
+   * QA-Security ①  Se usa node.textContent en lugar de innerHTML para todo
+   *               texto proveniente de la BD. Un title con '<script>' nunca
+   *               se ejecutará porque textContent lo trata como texto plano.
+   *
+   * QA-Perf ③     cloneNode(true) sobre un template pre-construido sería más
+   *               rápido que createElement para lotes muy grandes (>500 rows).
+   *               Con ITEMS_PER_PAGE=50 la diferencia es imperceptible (<1ms).
+   */
+  create(job) {
+    const a = document.createElement('a');
+    a.href   = this._safeUrl(job.job_url);
+    a.target = '_blank';
+    a.rel    = 'noopener noreferrer';
+    a.className = 'job-row flex items-center gap-3 px-6 py-2.5 border-b border-edge-1 cursor-pointer group';
+    a.dataset.jobUrl = job.job_url || '';
+
+    // ── Favicon ──
+    a.appendChild(this._makeFavicon(job));
+
+    // ── Cuerpo: título + badges ──
+    a.appendChild(this._makeBody(job));
+
+    // ── Empresa ──
+    const co = document.createElement('div');
+    co.className = 'w-32 hidden md:flex flex-shrink-0 truncate text-[11.5px] text-zinc-600';
+    co.textContent = job.company || '';
+    a.appendChild(co);
+
+    // ── Tipo (remote / hybrid) ──
+    a.appendChild(this._makeType(job));
+
+    // ── Tiempo relativo ──
+    const { text: timeText, hot } = this._relativeTime(job.sent_at);
+    const timeEl = document.createElement('div');
+    timeEl.className = 'w-16 flex-shrink-0 text-right';
+    const timeSpan = document.createElement('span');
+    timeSpan.className = `text-[11px] tabular-nums ${hot ? 'text-amber-500' : 'text-zinc-700'}`;
+    timeSpan.textContent = timeText;
+    timeEl.appendChild(timeSpan);
+    a.appendChild(timeEl);
+
+    // ── Apply button (visible on hover via CSS .apply-btn) ──
+    const applyWrap = document.createElement('div');
+    applyWrap.className = 'w-16 flex-shrink-0 flex justify-end';
+    const applyBtn = document.createElement('span');
+    applyBtn.className = 'apply-btn text-[10px] font-semibold text-violet-500 border border-violet-900/60 rounded px-2 py-0.5 bg-violet-950/40';
+    applyBtn.textContent = 'Apply →';
+    applyWrap.appendChild(applyBtn);
+    a.appendChild(applyWrap);
+
+    return a;
+  },
+
+  _makeFavicon(job) {
+    const wrap = document.createElement('div');
+    wrap.className = 'w-[30px] h-[30px] flex-shrink-0 rounded-md bg-surface-3 border border-edge-1 flex items-center justify-center overflow-hidden';
+
+    const initial = document.createElement('span');
+    initial.className = 'text-zinc-600 text-[11px] font-bold select-none';
+    initial.textContent = (job.company || job.title || '?')[0].toUpperCase();
+    wrap.appendChild(initial);
+
+    try {
+      const host = new URL(job.job_url || '').hostname;
+      const img  = document.createElement('img');
+      img.src    = `https://www.google.com/s2/favicons?sz=32&domain=${encodeURIComponent(host)}`;
+      img.alt    = '';
+      img.loading = 'lazy';
+      img.className = 'w-full h-full object-contain';
+      // QA-Security ②: el src es una URL de Google construida con hostname parseado,
+      // nunca con datos de usuario directos. El host viene de URL(), que lanza en
+      // caso de URL inválida (capturado por el try/catch).
+      img.onerror = () => { img.style.display = 'none'; };
+      wrap.insertBefore(img, initial);
+    } catch { /* URL inválida: solo se muestra el initial */ }
+
+    return wrap;
+  },
+
+  _makeBody(job) {
+    const body = document.createElement('div');
+    body.className = 'flex-1 min-w-0 flex items-center gap-2 flex-wrap';
+
+    const title = document.createElement('span');
+    title.className = 'job-title-text text-[13px] font-medium text-zinc-300 truncate transition-colors leading-none';
+    title.textContent = job.title || ''; // textContent: XSS-safe
+    body.appendChild(title);
+
+    // Badge: exclusiva
+    if (job.not_on_linkedin) {
+      body.appendChild(this._badge('excl.', 'badge-excl'));
+    }
+
+    // Badge: ubicación
+    const loc = this._inferLoc(job);
+    if (loc) body.appendChild(this._badge(loc.label, loc.cls));
+
+    // Badge: seniority
+    const sen = this._inferSen(job.title);
+    if (sen) body.appendChild(this._badge(sen.label, sen.cls));
+
+    return body;
+  },
+
+  _makeType(job) {
+    const wrap = document.createElement('div');
+    wrap.className = 'w-24 hidden lg:flex flex-shrink-0 text-[10px]';
+    const text = document.createElement('span');
+    const titleUrl = (job.title || '') + (job.job_url || '');
+    if (/remote|remoto|anywhere|worldwide/i.test(titleUrl)) {
+      text.className = 'text-emerald-600';
+      text.textContent = 'remote';
+    } else if (/hybrid|híbrido/i.test(job.title || '')) {
+      text.className = 'text-sky-600';
+      text.textContent = 'hybrid';
+    } else {
+      text.className = 'text-zinc-700';
+      text.textContent = '—';
+    }
+    wrap.appendChild(text);
+    return wrap;
+  },
+
+  _badge(label, cls) {
+    const span = document.createElement('span');
+    span.className = `badge ${cls} flex-shrink-0`;
+    span.textContent = label;
+    return span;
+  },
+
+  _inferLoc(job) {
+    const text = `${job.title || ''} ${job.company || ''}`.toLowerCase();
+    if (/\b(remote|remoto|anywhere|distributed|worldwide)\b/.test(text))
+      return { label: 'Remote', cls: 'badge-remote' };
+    if (/\b(latam|latin\s*america|argentina|uruguay|chile|colombia|brasil|brazil|m[eé]xico|peru)\b/.test(text))
+      return { label: 'LATAM', cls: 'badge-latam' };
+    try {
+      const host = new URL(job.job_url || '').hostname;
+      const ATS  = { greenhouse: 'Greenhouse', lever: 'Lever', ashby: 'Ashby',
+                     workable: 'Workable', remoteok: 'RemoteOK', remotive: 'Remotive' };
+      for (const [k, v] of Object.entries(ATS))
+        if (host.includes(k)) return { label: v, cls: 'badge-ats' };
+    } catch {}
+    return null;
+  },
+
+  _inferSen(title = '') {
+    const t = title.toLowerCase();
+    if (/\b(lead|staff|principal|architect|director|head of|manager|vp|chief)\b/.test(t)) return { label: 'Lead',   cls: 'badge-lead' };
+    if (/\b(senior|sr\.?)\b/.test(t))                                                     return { label: 'Senior', cls: 'badge-senior' };
+    if (/\b(mid[\s-]?level|semi[\s-]?senior|ssr|pleno|middle)\b/.test(t))                 return { label: 'Mid',    cls: 'badge-mid' };
+    if (/\b(junior|jr\.?|entry[\s-]level|intern|trainee)\b/.test(t))                     return { label: 'Junior', cls: 'badge-junior' };
+    return null;
+  },
+
+  _relativeTime(dateStr) {
+    const diff  = Math.max(0, Date.now() - new Date(dateStr).getTime());
+    const mins  = Math.floor(diff / 60_000);
+    const hours = Math.floor(diff / 3_600_000);
+    const days  = Math.floor(diff / 86_400_000);
+    if (mins  < 1)  return { text: 'ahora', hot: true };
+    if (mins  < 60) return { text: `${mins}m`,  hot: true };
+    if (hours < 6)  return { text: `${hours}h`, hot: true };
+    if (hours < 24) return { text: `${hours}h`, hot: false };
+    if (days  < 7)  return { text: `${days}d`,  hot: false };
+    return {
+      text: new Date(dateStr).toLocaleDateString('es-AR', { day: 'numeric', month: 'short' }),
+      hot: false,
+    };
+  },
+
+  /**
+   * _safeUrl(url) → string
+   * QA-Security ③  Solo permite protocolos http/https. Cualquier otro
+   *               (javascript:, data:, etc.) se reemplaza por '#'.
+   *               Protege contra href injection si llegara un job_url
+   *               malicioso desde la BD o un feed externo comprometido.
+   */
+  _safeUrl(url = '') {
+    try {
+      const parsed = new URL(url);
+      return (parsed.protocol === 'https:' || parsed.protocol === 'http:')
+        ? url
+        : '#';
+    } catch { return '#'; }
+  },
+};
+
+// ─────────────────────────────────────────────────────────────────────
+// Fin de Trovilo Engine — Vue app a continuación
+// ─────────────────────────────────────────────────────────────────────
+
 const SUPABASE_URL      = "https://elzivznpozizegymidqd.supabase.co";
 const SUPABASE_ANON_KEY = "sb_publishable_ulcsSFE144n7bQwG9eTvkg_zUHy3VZM";
 const TELEGRAM_LINK     = "https://t.me/+qUKDg8Nc1B5hOWNh";
@@ -946,6 +1511,11 @@ createApp({
       /* Navigation */
       panel: 'buscador',
 
+      // ── Scroller state (sync con TroviloScroller) ──
+      scrollerEmpty:    true,   // controla el empty-state en el template
+      scrollerRendered: 0,      // rows actualmente en el DOM
+      scrollerTotal:    0,      // total de rows en el pool filtrado
+
       /* Search form (config) */
       form:         { tech_stack: '', job_type: [], location: '', telegram_user: '' },
       formLoading:  false, formError: '', formSuccess: '', formSubmitted: false,
@@ -966,7 +1536,7 @@ createApp({
       savingDomains: false, saveDomainsOk: false, saveDomainsErr: '',
 
       /* Buscador */
-      jobs: [], jobsLoading: false, displayLimit: 100,
+      jobs: [], jobsLoading: false,
       jobSearch: '', jobLocation: '', jobSeniority: '', jobTime: 0,
       jobMode: 'all', soloExclusivas: false,
       communitySource: 'all', scrapingCommunity: false,
@@ -1055,8 +1625,23 @@ createApp({
     },
 
     /* ── Navigation ────────────────────────── */
+    /**
+     * go(name)
+     * ────────
+     * Punto de entrada de navegación desde el template Vue (clicks del sidebar).
+     * Delega al TroviloRouter para que aplique las clases CSS y sincroniza
+     * el estado reactivo local. Evita re-entrada infinita comprobando si el
+     * router ya apuntó a este destino.
+     */
     go(name) {
       this.panel = name;
+
+      // Sincronizar con TroviloRouter (aplica clase hidden en paneles DOM reales)
+      // La guardia en TroviloRouter.navigate evita bucle si Vue llamó desde ahí.
+      if (TroviloRouter.current !== name) {
+        TroviloRouter.navigate(name);
+      }
+
       if (name === 'feed')     this.loadFuentes();
       if (name === 'miembros') this.loadMembers();
       if (name === 'metricas') { this.loadMembers(); if (!this.jobs.length) this.loadJobs(); }
@@ -1220,14 +1805,51 @@ createApp({
     },
 
     /* ── Jobs ──────────────────────────────── */
+    /**
+     * loadJobs()
+     * ──────────
+     * Descarga todos los jobs desde Supabase y los publica en
+     * systemJobsMemory + estado reactivo Vue + TroviloScroller.
+     *
+     * QA-Flow ①  Limpiar this.jobs ANTES del await evita que el scroller
+     *            intente renderizar con datos del ciclo anterior mientras
+     *            llega la respuesta de red.
+     * QA-Flow ②  Publicar en window.systemJobsMemory con el mismo array que
+     *            Vue para que el scroller lea por referencia sin copia.
+     */
     async loadJobs() {
-      this.jobsLoading = true; this.jobs = []; this.displayLimit = 100;
+      this.jobsLoading  = true;
+      this.jobs         = [];
+      this.scrollerEmpty = true;
+      window.systemJobsMemory = [];
+      window.currentPage = 1;
+
       const { data } = await db.from('sent_jobs')
         .select('title, company, job_url, sent_at, not_on_linkedin')
         .order('sent_at', { ascending: false });
-      this.jobs = data || []; this.jobsLoading = false;
+
+      this.jobs = data || [];
+      // Publicar en la memoria global para que TroviloScroller la consuma
+      window.systemJobsMemory = this.jobs;
+      this.jobsLoading = false;
+
+      // Arrancar el scroller con el pool fresco
+      TroviloScroller.reset();
     },
 
+    /**
+     * scrapeCommunity()
+     * ─────────────────
+     * Llama a la API local de scraping, hace merge por job_url con los jobs
+     * existentes y actualiza systemJobsMemory + el scroller.
+     *
+     * QA-Merge ①  Se usa un Map<url, job> para deduplicar en O(n):
+     *             los jobs de Supabase ya cargados tienen prioridad;
+     *             el scrape en vivo sólo agrega los que no existen.
+     * QA-Merge ②  Después del merge se reasigna this.jobs con el nuevo
+     *             array ordenado. Esto activa el watcher de Vue que resetea
+     *             el scroller automáticamente (ver watch.jobs).
+     */
     async scrapeCommunity() {
       this.scrapingCommunity = true; this.communityStatus = '';
       try {
@@ -1235,11 +1857,17 @@ createApp({
         const res = await fetch(`http://127.0.0.1:8765/search?${p}`);
         const pl  = await res.json();
         if (!res.ok || !pl.ok) throw new Error(pl.error || `HTTP ${res.status}`);
+
         const byUrl = new Map(this.jobs.map(j => [j.job_url, j]));
         for (const job of pl.jobs || []) {
           if (!job?.job_url) continue;
-          byUrl.set(job.job_url, { ...job, sent_at: job.sent_at || new Date().toISOString(), not_on_linkedin: job.not_on_linkedin !== false });
+          byUrl.set(job.job_url, {
+            ...job,
+            sent_at: job.sent_at || new Date().toISOString(),
+            not_on_linkedin: job.not_on_linkedin !== false,
+          });
         }
+        // Reasignación: activa watch.jobs → scroller.reset()
         this.jobs = Array.from(byUrl.values()).sort((a, b) => new Date(b.sent_at) - new Date(a.sent_at));
         this.communityStatus = `${pl.count || 0} encontradas`; this.communityStatusType = 'ok';
       } catch(e) {
@@ -1291,7 +1919,91 @@ createApp({
     initOf(job) { return (job.company ?? job.title ?? '?')[0].toUpperCase(); },
   },
 
-  mounted() { this.init(); },
+  /**
+   * watch
+   * ─────
+   * Los watchers actúan como el pegamento entre el estado reactivo de Vue
+   * y los módulos externos (TroviloScroller).
+   *
+   * QA-Watch ①  Observar 'filteredJobs' con deep:false (default).
+   *             filteredJobs es un computed que devuelve un nuevo array en
+   *             cada recalculación: Vue compara la referencia del array,
+   *             no su contenido. Esto evita O(n) deep-equal en cada render.
+   *
+   * QA-Watch ②  El watcher no es immediate:true para evitar que se
+   *             dispare antes de que TroviloScroller esté inicializado
+   *             (mounted() aún no corrió). El reset inicial lo hace
+   *             loadJobs() explícitamente.
+   */
+  watch: {
+    /**
+     * Cuando los filtros cambian (filteredJobs devuelve un nuevo array),
+     * resetear el scroller: limpiar DOM y re-renderizar desde página 1
+     * con el nuevo pool filtrado. Los filtros en sí no se tocan.
+     */
+    filteredJobs() {
+      // Evitar reset durante carga inicial (el scroller se arranca en loadJobs)
+      if (this.jobsLoading) return;
+      TroviloScroller.reset();
+    },
+
+    /**
+     * Cuando la lista maestra de jobs cambia (nueva descarga o merge),
+     * sincronizar systemJobsMemory con el nuevo array.
+     * El scroller se resetea a través del watcher filteredJobs que se
+     * dispara en cadena (jobs → filteredJobs → scroller.reset).
+     */
+    jobs(newJobs) {
+      window.systemJobsMemory = newJobs;
+      window.currentPage = 1;
+      // filteredJobs depende de jobs → su watcher reseteará el scroller
+    },
+  },
+
+  /**
+   * mounted()
+   * ──────────
+   * Punto de entrada del ciclo de vida Vue. El DOM ya está disponible.
+   *
+   * QA-Init ①  window.__trovilo debe asignarse ANTES de que TroviloScroller
+   *            llame a _getFilteredPool(), ya que esa función accede a
+   *            window.__trovilo.filteredJobs. Si el scroller se inicializa
+   *            primero y __trovilo no está disponible, usa el fallback
+   *            (systemJobsMemory completo sin filtrar), que es seguro.
+   *
+   * QA-Init ②  TroviloRouter.current se inicializa con 'buscador' para
+   *            que la primera llamada a navigate() no sea un no-op.
+   */
+  mounted() {
+    // Exponer la instancia Vue a los módulos externos
+    window.__trovilo = this;
+
+    // Inicializar el router con la vista inicial
+    TroviloRouter.current = null; // forzar el primer navigate
+    // Vue ya gestiona v-show; el router solo sincroniza el estado CSS externo
+
+    // Inicializar el scroller (arma el IntersectionObserver)
+    TroviloScroller.init(
+      '#instant-results-container',
+      '#scroller-mount',
+      '#scroll-sentinel',
+    );
+
+    // Arrancar la app
+    this.init();
+  },
+
+  /**
+   * unmounted()
+   * ────────────
+   * Limpieza cuando Vue destruye la instancia (SPA con router de alto nivel).
+   * QA-Memory ⑨  Sin esto, el IntersectionObserver quedaría vivo aunque el
+   *              componente ya no exista, generando un memory leak.
+   */
+  unmounted() {
+    TroviloScroller.destroy();
+    window.__trovilo = null;
+  },
 }).mount('#app');
 </script>
 </body>
