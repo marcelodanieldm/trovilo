@@ -53,8 +53,82 @@ ATS_DOMAINS = [
     "larajobs.com",
 ]
 
-DDG_HTML_URL = "https://html.duckduckgo.com/html/"
+DDG_HTML_URL  = "https://html.duckduckgo.com/html/"
+DDG_LITE_URL  = "https://duckduckgo.com/lite/"          # endpoint liviano para verificación
 BING_SEARCH_URL = "https://www.bing.com/search"  # reemplazo anti-CAPTCHA de DDG HTML
+
+# Headers que imitan un browser real para DuckDuckGo Lite
+_DDG_LITE_HEADERS = {
+    "User-Agent": (
+        "Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
+        "AppleWebKit/537.36 (KHTML, like Gecko) "
+        "Chrome/124.0.0.0 Safari/537.36"
+    ),
+    "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
+    "Accept-Language": "en-US,en;q=0.9",
+    "Referer": "https://duckduckgo.com/",
+}
+
+
+# ---------------------------------------------------------------------------
+# Verificador de exclusividad (not on LinkedIn)
+# ---------------------------------------------------------------------------
+
+def verify_linkedin_absence(title: str, company: str) -> bool:
+    """
+    Verifica si una oferta NO está publicada en LinkedIn usando DuckDuckGo Lite.
+
+    Construye un dork de coincidencia exacta:
+        site:linkedin.com/jobs/view/ "{company}" "{title}"
+
+    Envía un GET a https://duckduckgo.com/lite/?q={query} (sin JS, sin cookies)
+    y analiza el HTML de respuesta.
+
+    Returns:
+        True  → la oferta NO está en LinkedIn (exclusiva del scraper).
+        False → se encontró una coincidencia directa en LinkedIn.
+        True  → en caso de error de red / rate-limit (conservador: se asume exclusiva).
+
+    Nota: el caller debe insertar time.sleep(3) entre llamadas para evitar
+    bloqueos por rate-limit de DuckDuckGo.
+    """
+    import requests as _requests
+
+    query = f'site:linkedin.com/jobs/view/ "{company}" "{title}"'
+    url   = f"{DDG_LITE_URL}?q={quote_plus(query)}"
+
+    try:
+        resp = _requests.get(url, headers=_DDG_LITE_HEADERS, timeout=10)
+        resp.raise_for_status()
+        html = resp.text.lower()
+
+        # Señales explícitas de cero resultados en DDG Lite
+        _NO_RESULTS = (
+            "no results found",
+            "no results.",
+            "no results for",
+            "nenhum resultado",
+            "0 results",
+        )
+        if any(sig in html for sig in _NO_RESULTS):
+            log.debug("verify_linkedin_absence: sin resultados DDG para '%s @ %s'.", title, company)
+            return True
+
+        # Resultado positivo: DDG encontró al menos un link linkedin.com/jobs/view
+        if "linkedin.com/jobs/view" in html:
+            log.debug("verify_linkedin_absence: oferta encontrada en LinkedIn — '%s @ %s'.", title, company)
+            return False
+
+        # Sin señal clara → asumir exclusiva (conservador)
+        log.debug("verify_linkedin_absence: respuesta ambigua para '%s @ %s', asumiendo exclusiva.", title, company)
+        return True
+
+    except Exception as exc:
+        log.warning(
+            "verify_linkedin_absence: error al consultar DDG ('%s @ %s') — %s. Asumiendo exclusiva.",
+            title, company, exc,
+        )
+        return True
 
 
 # ---------------------------------------------------------------------------

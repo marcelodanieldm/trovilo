@@ -26,7 +26,7 @@ from datetime import datetime, timezone
 from dotenv import load_dotenv
 from playwright.sync_api import sync_playwright
 from browser import get_stealth_page
-from scraper import execute_unbreakable_scraping
+from scraper import execute_unbreakable_scraping, verify_linkedin_absence
 from notifier import supabase, bulk_filter_and_save, process_and_notify, notify_no_results
 from ats_engine import fetch_greenhouse_jobs, fetch_lever_jobs, RateLimitError
 from telegram_notifier import send_job_alert
@@ -203,14 +203,34 @@ def run_ats_pipeline() -> None:
 
     log.info("ATS pipeline: %d/%d alertas de Telegram enviadas.", sent_count, len(new_jobs))
 
-    # 6. Upsert masivo en sent_jobs
+    # 6. Verificar exclusividad (not_on_linkedin) antes del upsert
+    #    Se consulta DuckDuckGo Lite con un dork exacto por cada oferta nueva.
+    #    sleep(3) entre llamadas para evitar rate-limit de DDG.
+    log.info("ATS pipeline: verificando exclusividad LinkedIn para %d oferta(s)...", len(new_jobs))
+    for job in new_jobs:
+        try:
+            job["not_on_linkedin"] = verify_linkedin_absence(
+                title   = job.get("title",   ""),
+                company = job.get("company", ""),
+            )
+            log.debug(
+                "ATS pipeline: '%s' — not_on_linkedin=%s",
+                job.get("title"), job["not_on_linkedin"],
+            )
+        except Exception as exc:
+            log.warning("ATS pipeline: error en verify_linkedin_absence — %s. Default=True.", exc)
+            job["not_on_linkedin"] = True
+        time.sleep(3)  # throttle DDG Lite
+
+    # 7. Upsert masivo en sent_jobs (incluye not_on_linkedin)
     now_iso = datetime.now(timezone.utc).isoformat()
     records = [
         {
-            "job_url":  j["job_url"],
-            "title":    j.get("title",   ""),
-            "company":  j.get("company", ""),
-            "sent_at":  now_iso,
+            "job_url":        j["job_url"],
+            "title":          j.get("title",          ""),
+            "company":        j.get("company",        ""),
+            "sent_at":        now_iso,
+            "not_on_linkedin": j.get("not_on_linkedin", True),
         }
         for j in new_jobs
     ]
