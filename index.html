@@ -3,774 +3,923 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>trovilo</title>
+  <title>trovilo 🚀</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script>
+    tailwind.config = {
+      theme: {
+        extend: {
+          fontFamily: { mono: ['JetBrains Mono', 'Fira Code', 'Menlo', 'Consolas', 'monospace'] },
+          colors: {
+            brand: { DEFAULT: '#7c3aed', dim: '#5b21b6', glow: 'rgba(124,58,237,0.15)' },
+            surface: { 1: '#0d0d0f', 2: '#111113', 3: '#161618', 4: '#1c1c1f' },
+            edge: { 1: '#1e1e22', 2: '#27272b', 3: '#313136' },
+          },
+        },
+      },
+    }
+  </script>
   <style>
+    /* ── Reset + base ── */
     *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+    html, body, #app { height: 100%; }
+    body { background: #0a0a0c; -webkit-font-smoothing: antialiased; }
 
-    :root {
-      --bg:       #0c0c0c;
-      --s1:       #141414;
-      --s2:       #1a1a1a;
-      --b1:       #202020;
-      --b2:       #2c2c2c;
-      --t1:       #d4d4d4;
-      --t2:       #737373;
-      --t3:       #383838;
-      --w:        #e8e8e8;
-      --r:        4px;
-    }
-
-    html, body { height: 100%; }
-
-    body {
-      background: var(--bg);
-      color: var(--t1);
-      font: 13px/1.55 system-ui, -apple-system, 'Segoe UI', sans-serif;
-      -webkit-font-smoothing: antialiased;
-    }
-
+    /* ── Scrollbars ── */
     ::-webkit-scrollbar { width: 3px; height: 3px; }
     ::-webkit-scrollbar-track { background: transparent; }
-    ::-webkit-scrollbar-thumb { background: var(--b2); border-radius: 2px; }
+    ::-webkit-scrollbar-thumb { background: #2a2a2e; border-radius: 2px; }
 
-    #app { display: flex; flex-direction: column; height: 100vh; overflow: hidden; }
-
-    /* ── Topbar ── */
-    .topbar {
-      height: 44px;
-      display: flex;
-      align-items: center;
-      justify-content: space-between;
-      padding: 0 16px;
-      border-bottom: 1px solid var(--b1);
-      flex-shrink: 0;
+    /* ── Search input glow ── */
+    .search-input:focus {
+      outline: none;
+      border-color: #7c3aed;
+      box-shadow: 0 0 0 3px rgba(124,58,237,.12), 0 0 20px rgba(124,58,237,.06);
     }
-    .topbar-logo { font-size: 13px; font-weight: 600; color: var(--w); letter-spacing: -.01em; }
 
-    /* ── Layout ── */
-    .body { display: flex; flex: 1; overflow: hidden; }
-
-    .sidebar {
-      width: 156px;
-      flex-shrink: 0;
-      border-right: 1px solid var(--b1);
-      padding: 12px 6px;
-      display: flex;
-      flex-direction: column;
-      overflow-y: auto;
+    /* ── Sidebar nav item ── */
+    .nav-item { transition: background .12s, color .12s; }
+    .nav-item:hover  { background: rgba(124,58,237,.08); color: #d4d4d8; }
+    .nav-item.active {
+      background: rgba(124,58,237,.14);
+      color: #a78bfa;
+      box-shadow: inset 3px 0 0 #7c3aed;
     }
-    .nav-section { font-size: 10px; text-transform: uppercase; letter-spacing: .07em; color: var(--t3); padding: 0 8px; margin-bottom: 4px; font-weight: 500; }
-    .nav-btn {
-      display: block; width: 100%; text-align: left;
-      padding: 6px 8px; border-radius: var(--r);
-      font-size: 12.5px; color: var(--t2);
-      background: none; border: none; cursor: pointer;
-      transition: color .1s, background .1s;
+
+    /* ── Job row ── */
+    .job-row { transition: background .08s; }
+    .job-row:hover { background: rgba(255,255,255,.025); }
+    .job-row:hover .job-title-text { color: #a78bfa; }
+    .job-row:hover .apply-btn { opacity: 1; }
+
+    /* ── Apply button ── */
+    .apply-btn { opacity: 0; transition: opacity .12s; }
+
+    /* ── Toggle ── */
+    .toggle-track { transition: background .2s, border-color .2s; }
+    .toggle-thumb { transition: transform .2s cubic-bezier(.4,0,.2,1), background .2s; }
+    .toggle-track.on  { background: #7c3aed; border-color: #7c3aed; }
+    .toggle-track.on .toggle-thumb { transform: translateX(14px); background: #fff; }
+
+    /* ── Skeleton shimmer ── */
+    @keyframes shimmer { 0% { background-position:-400px 0 } 100% { background-position:400px 0 } }
+    .skeleton {
+      background: linear-gradient(90deg, #161618 25%, #1e1e22 50%, #161618 75%);
+      background-size: 400px 100%;
+      animation: shimmer 1.3s infinite linear;
+      border-radius: 3px;
     }
-    .nav-btn:hover { color: var(--t1); background: rgba(255,255,255,.04); }
-    .nav-btn.active { color: var(--w); background: rgba(255,255,255,.06); }
-    .sidebar-footer { margin-top: auto; padding: 12px 8px 0; border-top: 1px solid var(--b1); }
-    .sidebar-footer p { font-size: 10px; color: var(--t3); }
-
-    /* ── Content ── */
-    .content { flex: 1; overflow: hidden; display: flex; flex-direction: column; }
-    .scroll-panels { flex: 1; overflow-y: auto; }
-
-    /* ── Panels ── */
-    .panel      { max-width: 520px; margin: 0 auto; padding: 36px 20px; }
-    .panel-wide { max-width: 860px; margin: 0 auto; padding: 36px 20px; }
-
-    .page-header { margin-bottom: 24px; }
-    .page-title { font-size: 14px; font-weight: 600; color: var(--w); }
-    .page-sub { font-size: 11.5px; color: var(--t3); margin-top: 3px; }
-
-    /* ── Cards ── */
-    .card { border: 1px solid var(--b1); border-radius: var(--r); background: var(--s1); }
-    .card-body { padding: 20px; }
-    .card-header {
-      padding: 12px 16px;
-      display: flex; align-items: center; justify-content: space-between;
-      border-bottom: 1px solid var(--b1);
-    }
-    .card-title { font-size: 12.5px; font-weight: 500; color: var(--t1); }
-
-    /* ── Form ── */
-    .field-group { margin-bottom: 18px; }
-    .field-label {
-      display: block; font-size: 10.5px; font-weight: 500;
-      text-transform: uppercase; letter-spacing: .06em;
-      color: var(--t2); margin-bottom: 6px;
-    }
-    input[type=text], input[type=email], input[type=password],
-    input[type=search], textarea, select {
-      width: 100%; background: var(--bg); border: 1px solid var(--b2);
-      border-radius: var(--r); color: var(--t1);
-      font: 13px/1.4 system-ui, -apple-system, sans-serif;
-      padding: 7px 10px; outline: none; transition: border-color .12s;
-    }
-    input:focus, textarea:focus, select:focus { border-color: var(--b2); box-shadow: 0 0 0 2px rgba(255,255,255,.05); }
-    input::placeholder, textarea::placeholder { color: var(--t3); }
-    textarea { resize: vertical; }
-
-    .input-with-prefix { position: relative; }
-    .input-prefix-char {
-      position: absolute; left: 10px; top: 50%; transform: translateY(-50%);
-      color: var(--t3); pointer-events: none; font-size: 13px;
-    }
-    .input-with-prefix input { padding-left: 20px; }
-
-    .hint { font-size: 11px; color: var(--t3); margin-top: 5px; }
-    .err  { font-size: 11px; color: #f87171; margin-top: 5px; }
-
-    .check-row { display: flex; gap: 18px; flex-wrap: wrap; }
-    .check-item {
-      display: flex; align-items: center; gap: 6px;
-      font-size: 12.5px; color: var(--t2); cursor: pointer; user-select: none;
-    }
-    .check-item input[type=checkbox] { width: auto; padding: 0; accent-color: var(--w); }
-
-    .pills { display: flex; flex-wrap: wrap; gap: 5px; margin-top: 8px; }
-    .pill {
-      padding: 3px 10px; border-radius: 100px; font-size: 11px;
-      border: 1px solid var(--b2); color: var(--t2);
-      background: none; cursor: pointer; transition: all .1s;
-    }
-    .pill:hover { border-color: var(--b2); color: var(--t1); }
-    .pill.active { border-color: var(--w); color: var(--w); background: rgba(255,255,255,.05); }
-
-    /* ── Buttons ── */
-    .btn {
-      display: inline-flex; align-items: center; justify-content: center; gap: 5px;
-      padding: 7px 13px; border-radius: var(--r);
-      font: 500 12.5px/1 system-ui, sans-serif;
-      cursor: pointer; border: none; transition: all .12s;
-    }
-    .btn:disabled { opacity: .38; cursor: not-allowed; }
-    .btn-full { width: 100%; }
-    .btn-sm   { padding: 4px 10px; font-size: 12px; }
-
-    .btn-primary { background: var(--w); color: #000; }
-    .btn-primary:hover:not(:disabled) { background: #f0f0f0; }
-
-    .btn-ghost { background: transparent; border: 1px solid var(--b2); color: var(--t2); }
-    .btn-ghost:hover:not(:disabled) { border-color: var(--b2); color: var(--t1); background: rgba(255,255,255,.03); }
-
-    .btn-muted { background: transparent; border: 1px solid transparent; color: var(--t3); }
-    .btn-muted:hover:not(:disabled) { color: #f87171; border-color: rgba(248,113,113,.2); }
-
-    /* ── Alert ── */
-    .alert { padding: 9px 12px; border-radius: var(--r); font-size: 12px; border: 1px solid; margin-top: 14px; }
-    .alert-err  { border-color: rgba(248,113,113,.2); color: #f87171;  background: rgba(248,113,113,.05); }
-    .alert-ok   { border-color: rgba(74,222,128,.2);  color: #4ade80;  background: rgba(74,222,128,.05); }
 
     /* ── Badge ── */
-    .badge {
-      display: inline-flex; align-items: center;
-      padding: 1px 5px; border-radius: 3px;
-      font-size: 10px; font-weight: 500; border: 1px solid;
-    }
-    .b-green  { color: #4ade80; border-color: rgba(74,222,128,.2);  background: rgba(74,222,128,.06); }
-    .b-blue   { color: #60a5fa; border-color: rgba(96,165,250,.2);  background: rgba(96,165,250,.06); }
-    .b-orange { color: #fb923c; border-color: rgba(251,146,60,.2);  background: rgba(251,146,60,.06); }
-    .b-yellow { color: #facc15; border-color: rgba(250,204,21,.2);  background: rgba(250,204,21,.06); }
-    .b-red    { color: #f87171; border-color: rgba(248,113,113,.2); background: rgba(248,113,113,.06); }
-    .b-violet { color: #a78bfa; border-color: rgba(167,139,250,.2); background: rgba(167,139,250,.06); }
-    .b-muted  { color: var(--t3); border-color: var(--b1); }
+    .badge { display: inline-flex; align-items: center; padding: 1px 6px; border-radius: 3px; font-size: 10px; font-weight: 600; border: 1px solid; letter-spacing: .03em; }
+    .badge-remote   { color: #34d399; border-color: rgba(52,211,153,.2);  background: rgba(52,211,153,.06); }
+    .badge-latam    { color: #60a5fa; border-color: rgba(96,165,250,.2);  background: rgba(96,165,250,.06); }
+    .badge-senior   { color: #f97316; border-color: rgba(249,115,22,.2);  background: rgba(249,115,22,.06); }
+    .badge-mid      { color: #fbbf24; border-color: rgba(251,191,36,.2);  background: rgba(251,191,36,.06); }
+    .badge-junior   { color: #4ade80; border-color: rgba(74,222,128,.2);  background: rgba(74,222,128,.06); }
+    .badge-lead     { color: #f87171; border-color: rgba(248,113,113,.2); background: rgba(248,113,113,.06); }
+    .badge-excl     { color: #c4b5fd; border-color: rgba(196,181,253,.2); background: rgba(124,58,237,.08); }
+    .badge-ats      { color: #71717a; border-color: rgba(113,113,122,.15);background: transparent; }
 
-    /* ── Tag ── */
-    .tag {
-      display: inline-flex; padding: 2px 8px; border-radius: 100px;
-      font-size: 11px; border: 1px solid var(--b2); color: var(--t2);
-      cursor: pointer; transition: all .1s;
-    }
-    .tag:hover { color: var(--t1); border-color: var(--b2); background: rgba(255,255,255,.03); }
+    /* ── Metric card ── */
+    .metric-card { border: 1px solid #1e1e22; border-radius: 6px; background: #111113; padding: 20px; }
 
-    /* ── Skeleton ── */
-    @keyframes sh { 0% { background-position: -300px 0; } 100% { background-position: 300px 0; } }
-    .sk {
-      background: linear-gradient(90deg, var(--s1) 25%, var(--s2) 50%, var(--s1) 75%);
-      background-size: 300px 100%; animation: sh 1.3s infinite linear; border-radius: 3px;
+    /* ── Form field ── */
+    .field {
+      width: 100%; background: #0d0d0f; border: 1px solid #27272b;
+      border-radius: 4px; color: #d4d4d8; font-family: inherit;
+      font-size: 13px; padding: 7px 10px; outline: none; transition: border-color .12s;
     }
+    .field:focus { border-color: #7c3aed; box-shadow: 0 0 0 2px rgba(124,58,237,.1); }
+    .field::placeholder { color: #3f3f46; }
 
-    /* ── Table ── */
-    table { width: 100%; border-collapse: collapse; }
-    thead th {
-      text-align: left; padding: 8px 12px;
-      font-size: 10px; font-weight: 500; text-transform: uppercase; letter-spacing: .07em;
-      color: var(--t3); border-bottom: 1px solid var(--b1);
-    }
-    tbody tr { border-bottom: 1px solid var(--b1); transition: background .1s; }
-    tbody tr:last-child { border-bottom: none; }
-    tbody tr:hover { background: rgba(255,255,255,.025); }
-    td { padding: 9px 12px; font-size: 12.5px; vertical-align: middle; }
+    /* ── Pill button (mode filter) ── */
+    .mode-pill { padding: 3px 9px; border-radius: 4px; font-size: 11px; font-weight: 500; border: 1px solid #27272b; color: #52525b; background: none; cursor: pointer; transition: all .1s; }
+    .mode-pill:hover { color: #a1a1aa; border-color: #3f3f46; }
+    .mode-pill.on { color: #a78bfa; border-color: rgba(124,58,237,.4); background: rgba(124,58,237,.1); }
 
-    /* ── Job card ── */
-    .job-card {
-      display: flex; align-items: flex-start; gap: 11px;
-      padding: 11px 16px; border-bottom: 1px solid var(--b1);
-      text-decoration: none; color: inherit; transition: background .1s;
-    }
-    .job-card:hover { background: rgba(255,255,255,.025); }
-    .job-card:last-child { border-bottom: none; }
-    .job-ico {
-      width: 30px; height: 30px; flex-shrink: 0;
-      border: 1px solid var(--b1); border-radius: 5px;
-      background: var(--s2);
-      display: flex; align-items: center; justify-content: center;
-      font-size: 11px; font-weight: 600; color: var(--t3); user-select: none;
-      overflow: hidden;
-    }
-    .job-ico img { width: 100%; height: 100%; object-fit: contain; }
-    .job-body  { flex: 1; min-width: 0; }
-    .job-title {
-      font-size: 13px; font-weight: 500; color: var(--t1);
-      overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
-      transition: color .1s;
-    }
-    .job-card:hover .job-title { color: var(--w); }
-    .job-meta  { display: flex; align-items: center; gap: 6px; margin-top: 3px; flex-wrap: wrap; }
-    .job-co    { font-size: 11.5px; color: var(--t2); }
-    .job-time  { font-size: 11px; color: var(--t3); white-space: nowrap; flex-shrink: 0; margin-top: 1px; }
-    .job-time.hot { color: #fb923c; }
+    /* ── Brian widget ── */
+    .brian-chip { display: inline-block; padding: 1px 7px; border-radius: 100px; font-size: 10px; border: 1px solid #27272b; color: #52525b; }
 
-    /* ── Filter bar ── */
-    .fbar { border-bottom: 1px solid var(--b1); padding: 9px 14px; flex-shrink: 0; }
-    .frow { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; }
-    .frow + .frow { margin-top: 7px; }
-    .fi {
-      background: var(--bg); border: 1px solid var(--b1);
-      border-radius: var(--r); color: var(--t1);
-      font: 12px system-ui, sans-serif; padding: 5px 8px; outline: none;
-      transition: border-color .12s;
-    }
-    .fi:focus { border-color: var(--b2); }
-    .fi::placeholder { color: var(--t3); }
-    .fi-flex { flex: 1; min-width: 130px; }
-    .fpill {
-      padding: 4px 9px; border-radius: var(--r); font-size: 11.5px;
-      border: 1px solid var(--b1); color: var(--t2); background: none;
-      cursor: pointer; transition: all .1s; font-family: system-ui, sans-serif;
-    }
-    .fpill:hover { color: var(--t1); border-color: var(--b2); }
-    .fpill.on { color: var(--w); border-color: var(--b2); background: rgba(255,255,255,.05); }
-
-    .toggle-wrap { display: inline-flex; align-items: center; gap: 6px; cursor: pointer; user-select: none; }
-    .toggle-wrap:hover .toggle-label { color: var(--t1); }
-    .toggle-label { font-size: 11.5px; color: var(--t2); transition: color .1s; }
-    .toggle-track {
-      width: 26px; height: 14px; border-radius: 7px;
-      background: var(--b2); border: 1px solid var(--b2);
-      position: relative; transition: background .15s;
-    }
-    .toggle-track.on { background: var(--w); border-color: var(--w); }
-    .toggle-thumb {
-      position: absolute; top: 2px; left: 2px;
-      width: 8px; height: 8px; border-radius: 50%;
-      background: var(--t2); transition: transform .15s, background .15s;
-    }
-    .toggle-track.on .toggle-thumb { transform: translateX(12px); background: #000; }
-
-    .sep { width: 1px; height: 12px; background: var(--b1); }
-    .stat { font-size: 11px; color: var(--t3); }
-
-    /* ── Fuente item ── */
-    .fuente-row {
-      display: flex; align-items: center; justify-content: space-between;
-      padding: 6px 10px; border-radius: 3px; transition: background .1s;
-    }
-    .fuente-row:hover { background: rgba(255,255,255,.03); }
-    .fuente-dot { width: 4px; height: 4px; border-radius: 50%; background: var(--t3); flex-shrink: 0; }
-    .fuente-name { font-size: 12px; color: var(--t2); font-family: 'Menlo','Consolas',monospace; margin-left: 8px; }
-    .fuente-del { opacity: 0; color: var(--t3); background: none; border: none; cursor: pointer; font-size: 11px; transition: all .1s; padding: 2px 4px; border-radius: 3px; }
-    .fuente-row:hover .fuente-del { opacity: 1; }
-    .fuente-del:hover { color: #f87171; }
-
-    /* ── Count chip ── */
-    .chip { font-size: 10px; color: var(--t3); border: 1px solid var(--b1); padding: 1px 7px; border-radius: 100px; }
-
-    /* ── Collapsible ── */
-    .coll-hdr {
-      display: flex; align-items: center; justify-content: space-between;
-      padding: 11px 16px; cursor: pointer; font-size: 12.5px; color: var(--t2);
-      transition: color .1s; user-select: none;
-    }
-    .coll-hdr:hover { color: var(--t1); }
-    .coll-body { padding: 0 16px 16px; border-top: 1px solid var(--b1); }
-
-    /* ── Login ── */
-    .login-wrap { flex: 1; display: flex; align-items: center; justify-content: center; padding: 24px; }
-    .login-box  { width: 100%; max-width: 300px; }
-    .login-brand { text-align: center; margin-bottom: 28px; }
-    .login-brand h1 { font-size: 18px; font-weight: 600; color: var(--w); letter-spacing: -.02em; }
-    .login-brand p  { font-size: 12px; color: var(--t3); margin-top: 4px; }
-
-    /* ── Modal ── */
-    .modal-bg {
-      position: fixed; inset: 0; background: rgba(0,0,0,.7);
-      display: flex; align-items: center; justify-content: center;
-      padding: 20px; z-index: 100;
-    }
-    .modal-box { width: 100%; max-width: 340px; }
-
-    /* ── Empty ── */
-    .empty { padding: 56px 24px; text-align: center; color: var(--t3); font-size: 12.5px; }
-
-    /* ── Tech cloud card ── */
-    .cloud-card { background: var(--s1); border: 1px solid var(--b1); border-radius: var(--r); padding: 12px; margin-top: 10px; }
-    .cloud-label { font-size: 10.5px; color: var(--t3); margin-bottom: 8px; }
-
-    /* ── Mobile ── */
-    @media (max-width: 640px) {
-      .sidebar { display: none; }
-      .panel, .panel-wide { padding: 24px 14px; }
-    }
+    /* ── Status dot ── */
+    @keyframes pulse { 0%,100%{opacity:1} 50%{opacity:.35} }
+    .dot-live { animation: pulse 2s infinite; }
   </style>
 </head>
-<body>
-<div id="app">
 
-  <!-- ── LOGIN ─────────────────────────────────── -->
-  <div v-if="!session" class="login-wrap">
-    <div class="login-box">
-      <div class="login-brand">
-        <h1>trovilo</h1>
-        <p>Iniciá sesión para continuar</p>
+<body class="font-mono text-zinc-400">
+<div id="app" class="h-full flex flex-col">
+
+  <!-- ════════════════════════════════════════════
+       VISTA: LOGIN
+  ════════════════════════════════════════════ -->
+  <div v-if="!session"
+       class="h-full flex items-center justify-center bg-[#0a0a0c] px-4">
+    <div class="w-full max-w-[320px]">
+
+      <!-- Logo -->
+      <div class="text-center mb-8">
+        <div class="inline-flex items-center gap-2 mb-3">
+          <div class="w-8 h-8 rounded-lg bg-brand flex items-center justify-center text-white text-sm font-bold">T</div>
+          <span class="text-white text-lg font-bold tracking-tight">trovilo 🚀</span>
+        </div>
+        <p class="text-xs text-zinc-600">Acceso restringido. Iniciá sesión.</p>
       </div>
-      <div class="card card-body">
+
+      <!-- Card -->
+      <div class="bg-surface-2 border border-edge-1 rounded-lg p-6">
         <form @submit.prevent="login">
-          <div class="field-group">
-            <label class="field-label">Email</label>
-            <input type="email" v-model="loginEmail" placeholder="tu@email.com" autocomplete="email" required>
+          <div class="mb-4">
+            <label class="block text-[10px] uppercase tracking-widest text-zinc-600 mb-1.5">Email</label>
+            <input type="email" v-model="loginEmail" placeholder="user@domain.com"
+                   autocomplete="email" required class="field" />
           </div>
-          <div class="field-group">
-            <label class="field-label">Contraseña</label>
-            <input type="password" v-model="loginPassword" placeholder="••••••••" autocomplete="current-password" required>
+          <div class="mb-5">
+            <label class="block text-[10px] uppercase tracking-widest text-zinc-600 mb-1.5">Contraseña</label>
+            <input type="password" v-model="loginPassword" placeholder="••••••••"
+                   autocomplete="current-password" required class="field" />
           </div>
-          <button type="submit" class="btn btn-primary btn-full" :disabled="loginLoading">
-            {{ loginLoading ? 'Verificando…' : 'Iniciar sesión' }}
+          <button type="submit" :disabled="loginLoading"
+                  class="w-full py-2 rounded bg-brand text-white text-sm font-semibold
+                         hover:bg-brand-dim disabled:opacity-40 transition">
+            {{ loginLoading ? 'Verificando…' : 'Iniciar sesión →' }}
           </button>
-          <div v-if="loginError" class="alert alert-err">{{ loginError }}</div>
         </form>
+        <div v-if="loginError"
+             class="mt-3 text-[11px] text-red-400 bg-red-950/40 border border-red-900/40 rounded px-3 py-2">
+          {{ loginError }}
+        </div>
       </div>
     </div>
   </div>
 
-  <!-- ── DASHBOARD ──────────────────────────────── -->
-  <template v-else>
+  <!-- ════════════════════════════════════════════
+       VISTA: DASHBOARD
+  ════════════════════════════════════════════ -->
+  <div v-else class="h-full flex overflow-hidden">
 
-    <!-- Topbar -->
-    <div class="topbar">
-      <span class="topbar-logo">trovilo</span>
-      <button class="btn btn-ghost btn-sm" @click="logout" :disabled="logoutLoading">
-        {{ logoutLoading ? 'Saliendo…' : 'Cerrar sesión' }}
-      </button>
-    </div>
+    <!-- ─── SIDEBAR ──────────────────────────────── -->
+    <aside class="w-[220px] flex-shrink-0 flex flex-col bg-surface-1 border-r border-edge-1 overflow-y-auto">
 
-    <!-- Body -->
-    <div class="body">
+      <!-- Logotipo -->
+      <div class="px-4 pt-5 pb-4 border-b border-edge-1">
+        <div class="flex items-center gap-2.5">
+          <div class="w-7 h-7 rounded-md bg-brand flex items-center justify-center text-white text-xs font-black flex-shrink-0">T</div>
+          <span class="text-white text-[13px] font-bold tracking-tight">trovilo <span class="text-brand">🚀</span></span>
+        </div>
+        <!-- Live indicator -->
+        <div class="flex items-center gap-1.5 mt-2.5">
+          <span class="dot-live w-1.5 h-1.5 rounded-full bg-emerald-400 flex-shrink-0"></span>
+          <span class="text-[10px] text-zinc-600">scraper activo</span>
+        </div>
+      </div>
 
-      <!-- Sidebar -->
-      <aside class="sidebar">
-        <div class="nav-section" style="margin-top:4px">Menú</div>
-        <button class="nav-btn" :class="{active: panel==='busqueda'}"  @click="go('busqueda')">Búsqueda</button>
-        <button class="nav-btn" :class="{active: panel==='buscador'}"  @click="go('buscador')">Empleos</button>
-        <button class="nav-btn" :class="{active: panel==='fuentes'}"   @click="go('fuentes')">Fuentes</button>
-        <button class="nav-btn" :class="{active: panel==='miembros'}"  @click="go('miembros')">Miembros</button>
-        <div class="sidebar-footer"><p>© 2025</p></div>
-      </aside>
+      <!-- Navegación principal -->
+      <nav class="px-2 pt-3 space-y-0.5">
+        <p class="px-2 pb-1 text-[9px] uppercase tracking-widest text-zinc-700 font-semibold">Menú</p>
 
-      <!-- Content -->
-      <div class="content">
+        <button @click="go('buscador')"
+                class="nav-item w-full flex items-center gap-2.5 px-2.5 py-2 rounded text-[12.5px] text-left"
+                :class="panel === 'buscador' ? 'active' : 'text-zinc-500'">
+          <span class="text-sm leading-none">⚡</span>
+          <span>Buscador</span>
+          <span v-if="jobs.length" class="ml-auto text-[10px] text-zinc-700 tabular-nums">{{ jobs.length }}</span>
+        </button>
 
-        <!-- Scrollable panels -->
-        <div class="scroll-panels" v-show="panel !== 'buscador'">
+        <button @click="go('metricas')"
+                class="nav-item w-full flex items-center gap-2.5 px-2.5 py-2 rounded text-[12.5px] text-left"
+                :class="panel === 'metricas' ? 'active' : 'text-zinc-500'">
+          <span class="text-sm leading-none">📊</span>
+          <span>Métricas</span>
+        </button>
 
-          <!-- ══ BÚSQUEDA ══ -->
-          <div class="panel" v-show="panel === 'busqueda'">
-            <div class="page-header">
-              <div class="page-title">Configurar búsqueda</div>
-              <div class="page-sub">Criterios para el scraper de Telegram</div>
+        <button @click="go('feed')"
+                class="nav-item w-full flex items-center gap-2.5 px-2.5 py-2 rounded text-[12.5px] text-left"
+                :class="panel === 'feed' ? 'active' : 'text-zinc-500'">
+          <span class="text-sm leading-none">🌐</span>
+          <span>Feed Externo</span>
+          <span v-if="fuentes.length" class="ml-auto text-[10px] text-zinc-700 tabular-nums">{{ fuentes.length }}</span>
+        </button>
+
+        <div class="h-px bg-edge-1 my-2"></div>
+        <p class="px-2 pb-1 text-[9px] uppercase tracking-widest text-zinc-700 font-semibold">Config</p>
+
+        <button @click="go('config')"
+                class="nav-item w-full flex items-center gap-2.5 px-2.5 py-2 rounded text-[12.5px] text-left"
+                :class="panel === 'config' ? 'active' : 'text-zinc-500'">
+          <span class="text-sm leading-none">⚙️</span>
+          <span>Configurar</span>
+        </button>
+
+        <button @click="go('miembros')"
+                class="nav-item w-full flex items-center gap-2.5 px-2.5 py-2 rounded text-[12.5px] text-left"
+                :class="panel === 'miembros' ? 'active' : 'text-zinc-500'">
+          <span class="text-sm leading-none">👥</span>
+          <span>Miembros</span>
+        </button>
+      </nav>
+
+      <!-- ── Brian's Job Search widget ── -->
+      <div class="mt-auto mx-2 mb-3 border border-edge-2 rounded-lg bg-surface-2 overflow-hidden">
+        <!-- Header del widget -->
+        <div class="flex items-center justify-between px-3 py-2 border-b border-edge-1">
+          <div class="flex items-center gap-1.5">
+            <span class="text-[10px]">🎯</span>
+            <span class="text-[10px] font-semibold text-zinc-300 uppercase tracking-wider">Brian's Job Search</span>
+          </div>
+          <button @click="go('config')"
+                  class="text-[10px] text-zinc-600 hover:text-violet-400 transition">✏️</button>
+        </div>
+        <!-- Contenido del widget -->
+        <div class="px-3 py-2.5 space-y-1.5">
+          <div v-if="brianConfig">
+            <!-- Stack tecnológico -->
+            <div class="flex flex-wrap gap-1 mb-2">
+              <span v-for="tech in brianTechs.slice(0,4)" :key="tech"
+                    class="brian-chip">{{ tech }}</span>
+              <span v-if="brianTechs.length > 4" class="brian-chip">+{{ brianTechs.length - 4 }}</span>
             </div>
-            <div class="card card-body">
-              <form @submit.prevent="submitForm">
-
-                <div class="field-group">
-                  <label class="field-label">Tecnologías</label>
-                  <input type="text" v-model="form.tech_stack" placeholder="Python, FastAPI, PostgreSQL…" required>
-                  <div class="hint">Separadas por comas</div>
-
-                  <!-- Cloud de tags -->
-                  <div class="cloud-card" v-if="techCloud.length">
-                    <div class="cloud-label">Buscadas por otros miembros · clic para agregar</div>
-                    <div class="pills">
-                      <button v-for="t in techCloud" :key="t" type="button" class="tag" @click="addTechTag(t)">{{ t }}</button>
-                    </div>
-                    <div style="display:flex;gap:6px;margin-top:10px">
-                      <input type="text" v-model="newTag" placeholder="Agregar tag…" @keydown.enter.prevent="addNewTag" style="flex:1;font-size:12px;padding:5px 8px">
-                      <button type="button" class="btn btn-ghost btn-sm" @click="addNewTag">+</button>
-                    </div>
-                  </div>
-                </div>
-
-                <div class="field-group">
-                  <label class="field-label">Modalidad</label>
-                  <div class="check-row">
-                    <label class="check-item"><input type="checkbox" v-model="form.job_type" value="remote"> Remoto</label>
-                    <label class="check-item"><input type="checkbox" v-model="form.job_type" value="hybrid"> Híbrido</label>
-                    <label class="check-item"><input type="checkbox" v-model="form.job_type" value="on-site"> Presencial</label>
-                  </div>
-                  <div class="err" v-if="formSubmitted && !form.job_type.length">Seleccioná al menos una modalidad.</div>
-                </div>
-
-                <div class="field-group">
-                  <label class="field-label">Ubicación</label>
-                  <input type="text" v-model="form.location" placeholder="Argentina, Buenos Aires…" required>
-                  <div class="pills">
-                    <button v-for="loc in ['Argentina','Uruguay','Latin America','Latam']" :key="loc"
-                      type="button" class="pill" :class="{active: form.location === loc}"
-                      @click="form.location = loc">{{ loc }}</button>
-                  </div>
-                </div>
-
-                <div class="field-group">
-                  <label class="field-label">Usuario de Telegram</label>
-                  <div class="input-with-prefix">
-                    <span class="input-prefix-char">@</span>
-                    <input type="text" v-model="form.telegram_user" placeholder="tuusuario" required>
-                  </div>
-                  <div class="hint">Sin el símbolo @</div>
-                </div>
-
-                <button type="submit" class="btn btn-primary btn-full" :disabled="formLoading">
-                  {{ formLoading ? 'Guardando…' : 'Guardar criterios' }}
-                </button>
-              </form>
-              <div v-if="formError"   class="alert alert-err">{{ formError }}</div>
-              <div v-if="formSuccess" class="alert alert-ok">
-                {{ formSuccess }}
-                <a :href="TELEGRAM_LINK" target="_blank" rel="noopener"
-                   style="display:block;margin-top:4px;font-size:11px;color:inherit;opacity:.7;text-decoration:underline">
-                  Ver canal de Telegram →
-                </a>
-              </div>
+            <!-- Location y modalidad -->
+            <div class="flex items-center gap-1 text-[10px] text-zinc-600">
+              <span>📍</span>
+              <span class="truncate">{{ brianConfig.location || '—' }}</span>
+            </div>
+            <div class="flex items-center gap-1 text-[10px] text-zinc-600">
+              <span>💬</span>
+              <span class="text-violet-500 font-medium">@{{ brianConfig.telegram_user }}</span>
             </div>
           </div>
-
-          <!-- ══ FUENTES ══ -->
-          <div class="panel-wide" v-show="panel === 'fuentes'">
-            <div class="page-header">
-              <div class="page-title">Fuentes de scraping</div>
-              <div class="page-sub">Dominios visitados en cada ejecución</div>
-            </div>
-
-            <div style="display:grid;grid-template-columns:1fr 1fr;gap:14px;align-items:start" class="fuentes-grid">
-
-              <!-- Lista -->
-              <div class="card">
-                <div class="card-header">
-                  <span class="card-title">Fuentes activas</span>
-                  <span class="chip">{{ fuentes.length }}</span>
-                </div>
-                <div style="padding:10px 10px 4px">
-                  <input type="search" v-model="fuentesSearch" placeholder="Filtrar…" class="fi" style="width:100%;font-size:12px;padding:5px 8px">
-                </div>
-                <div style="max-height:360px;overflow-y:auto;padding:4px 10px 10px">
-                  <template v-if="fuentesLoading">
-                    <div v-for="i in 5" :key="i" style="display:flex;align-items:center;gap:8px;padding:7px 2px">
-                      <div class="sk" style="width:6px;height:6px;border-radius:50%"></div>
-                      <div class="sk" :style="{height:'12px', width: (50+i*8)+'%'}"></div>
-                    </div>
-                  </template>
-                  <template v-else-if="filteredFuentes.length">
-                    <div v-for="f in filteredFuentes" :key="f.id" class="fuente-row">
-                      <div style="display:flex;align-items:center">
-                        <div class="fuente-dot"></div>
-                        <span class="fuente-name">{{ f.domain }}</span>
-                      </div>
-                      <button class="fuente-del" @click="deleteFuente(f.id, f.domain)">✕</button>
-                    </div>
-                  </template>
-                  <div v-else class="empty" style="padding:30px">Sin fuentes</div>
-                </div>
-              </div>
-
-              <!-- Agregar -->
-              <div class="card">
-                <div class="coll-hdr" @click="fuentesOpen = !fuentesOpen">
-                  <span>Agregar fuentes</span>
-                  <span style="font-size:11px;color:var(--t3)">{{ fuentesOpen ? '▲' : '▼' }}</span>
-                </div>
-                <div class="coll-body" v-show="fuentesOpen" style="padding-top:14px">
-                  <div class="field-group">
-                    <label class="field-label">CSV / Excel</label>
-                    <input type="file" accept=".csv,.xlsx,.xls" @change="handleFile"
-                      style="font-size:12px;color:var(--t2);cursor:pointer;width:100%">
-                  </div>
-                  <div class="field-group">
-                    <label class="field-label">URLs (una por línea)</label>
-                    <textarea v-model="manualUrls" rows="4" placeholder="https://jobs.example.com"></textarea>
-                  </div>
-                  <button class="btn btn-ghost btn-sm" style="width:100%" @click="processUrls">Extraer dominios</button>
-
-                  <template v-if="parsedDomains.length">
-                    <div style="margin-top:14px">
-                      <div style="font-size:11px;color:var(--t3);margin-bottom:8px">{{ parsedDomains.length }} dominios extraídos</div>
-                      <div class="pills">
-                        <span v-for="d in parsedDomains" :key="d" class="tag" style="cursor:default;font-family:monospace">{{ d }}</span>
-                      </div>
-                      <button class="btn btn-ghost btn-sm" style="margin-top:10px" @click="validateDomains">Validar contra el sistema</button>
-                    </div>
-                  </template>
-
-                  <template v-if="validationDone">
-                    <div style="margin-top:14px">
-                      <div v-if="alreadyDomains.length" style="margin-bottom:10px">
-                        <div style="font-size:11px;color:var(--t3);margin-bottom:6px">✓ Ya en el sistema ({{ alreadyDomains.length }})</div>
-                        <div class="pills">
-                          <span v-for="d in alreadyDomains" :key="d" class="badge b-green">{{ d }}</span>
-                        </div>
-                      </div>
-                      <div v-if="newDomains.length">
-                        <div style="font-size:11px;color:var(--t3);margin-bottom:8px">+ Nuevos ({{ newDomains.length }})</div>
-                        <div style="border:1px solid var(--b1);border-radius:var(--r);overflow:hidden">
-                          <label v-for="d in newDomains" :key="d"
-                            style="display:flex;align-items:center;gap:8px;padding:6px 10px;border-bottom:1px solid var(--b1);cursor:pointer;font-size:12px;color:var(--t2)"
-                            :style="{'border-bottom': d === newDomains[newDomains.length-1] ? 'none' : ''}">
-                            <input type="checkbox" :value="d" v-model="selectedDomains" style="width:auto;padding:0;accent-color:var(--w)">
-                            <span style="font-family:monospace">{{ d }}</span>
-                          </label>
-                        </div>
-                        <button class="btn btn-primary btn-sm" style="margin-top:10px;width:100%"
-                          :disabled="!selectedDomains.length || savingDomains" @click="saveDomains">
-                          {{ savingDomains ? 'Guardando…' : 'Agregar seleccionadas' }}
-                        </button>
-                        <div v-if="saveDomainsErr" class="alert alert-err">{{ saveDomainsErr }}</div>
-                      </div>
-                      <div v-if="!newDomains.length && !alreadyDomains.length" class="empty" style="padding:20px">Sin dominios nuevos</div>
-                    </div>
-                  </template>
-                  <div v-if="saveDomainsOk" class="alert alert-ok" style="margin-top:12px">Fuentes agregadas correctamente.</div>
-                </div>
-              </div>
-
-            </div>
+          <div v-else class="text-center py-2">
+            <p class="text-[10px] text-zinc-700 mb-1.5">Sin criterios configurados</p>
+            <button @click="go('config')"
+                    class="text-[10px] text-violet-500 hover:text-violet-300 transition">
+              Configurar búsqueda →
+            </button>
           </div>
+        </div>
+        <!-- Footer del widget -->
+        <div class="px-3 pb-2.5 flex items-center justify-between">
+          <span class="text-[9px] text-zinc-700">trovilo © 2025</span>
+          <button @click="logout" :disabled="logoutLoading"
+                  class="text-[9px] text-zinc-700 hover:text-red-500 transition disabled:opacity-40">
+            {{ logoutLoading ? '…' : 'salir' }}
+          </button>
+        </div>
+      </div>
 
-          <!-- ══ MIEMBROS ══ -->
-          <div class="panel-wide" v-show="panel === 'miembros'">
-            <div class="page-header" style="display:flex;align-items:flex-start;justify-content:space-between">
-              <div>
-                <div class="page-title">Miembros</div>
-                <div class="page-sub">Criterios registrados por usuario</div>
-              </div>
-              <span class="chip">{{ members.length }}</span>
+    </aside>
+
+    <!-- ─── CONTENT AREA ──────────────────────────── -->
+    <div class="flex-1 min-w-0 overflow-hidden flex flex-col bg-[#0a0a0c]">
+
+      <!-- ══ PANEL: BUSCADOR ══════════════════════════ -->
+      <div v-show="panel === 'buscador'" class="flex flex-col h-full overflow-hidden">
+
+        <!-- Header del buscador -->
+        <div class="flex-shrink-0 border-b border-edge-1 px-6 py-4 bg-surface-1">
+          <div class="flex items-start justify-between gap-4 mb-4">
+            <div>
+              <h1 class="text-white text-[15px] font-bold tracking-tight flex items-center gap-2">
+                ⚡ Buscador de Empleos
+                <span v-if="jobs.length" class="text-[11px] font-normal text-zinc-600 ml-1">
+                  {{ filteredJobs.length }} / {{ jobs.length }}
+                </span>
+              </h1>
+              <p class="text-[11px] text-zinc-600 mt-0.5">Empleos remotos indexados en tiempo real</p>
             </div>
-            <div class="card" style="overflow:hidden">
-              <div style="overflow-x:auto">
-                <table>
-                  <thead>
-                    <tr>
-                      <th>Usuario</th>
-                      <th>Tecnologías</th>
-                      <th>Modalidad</th>
-                      <th>Ubicación</th>
-                      <th style="text-align:right">Acciones</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    <template v-if="membersLoading">
-                      <tr v-for="i in 4" :key="i">
-                        <td><div class="sk" style="height:12px;width:80px"></div></td>
-                        <td><div class="sk" style="height:12px;width:120px"></div></td>
-                        <td><div class="sk" style="height:12px;width:60px"></div></td>
-                        <td><div class="sk" style="height:12px;width:80px"></div></td>
-                        <td></td>
-                      </tr>
-                    </template>
-                    <template v-else-if="members.length">
-                      <tr v-for="m in members" :key="m.id">
-                        <td style="font-family:monospace;color:var(--t1)">@{{ m.telegram_user }}</td>
-                        <td>
-                          <div style="display:flex;flex-wrap:wrap;gap:4px">
-                            <span v-for="t in techsOf(m)" :key="t"
-                              style="font-size:10.5px;padding:1px 6px;border:1px solid var(--b1);border-radius:3px;color:var(--t2)">{{ t }}</span>
-                          </div>
-                        </td>
-                        <td style="color:var(--t2)">{{ jobTypeLabel(m.job_type) }}</td>
-                        <td style="color:var(--t2)">{{ m.location }}</td>
-                        <td style="text-align:right">
-                          <button class="btn btn-ghost btn-sm" @click="openEdit(m)" style="margin-right:4px">Editar</button>
-                          <button class="btn btn-muted btn-sm" @click="deleteMember(m.id, m.telegram_user)">Eliminar</button>
-                        </td>
-                      </tr>
-                    </template>
-                    <tr v-else>
-                      <td colspan="5" class="empty">Sin miembros registrados</td>
-                    </tr>
-                  </tbody>
-                </table>
-              </div>
-            </div>
-          </div>
-
-        </div><!-- /scroll-panels -->
-
-        <!-- ══ BUSCADOR (full height) ══ -->
-        <div v-show="panel === 'buscador'" style="flex:1;display:flex;flex-direction:column;overflow:hidden">
-
-          <!-- Filter bar -->
-          <div class="fbar">
-            <div class="frow">
-              <input type="search" v-model="jobSearch" placeholder="Título, empresa…" class="fi fi-flex">
-              <select v-model="jobLocation" class="fi">
-                <option value="">Ubicación</option>
-                <option value="remote">Remote</option>
-                <option value="argentina">Argentina</option>
-                <option value="latam">LATAM</option>
-                <option value="uruguay">Uruguay</option>
-                <option value="colombia">Colombia</option>
-                <option value="mexico">México</option>
-                <option value="brasil">Brasil</option>
-                <option value="united states">USA</option>
-              </select>
-              <select v-model="jobSeniority" class="fi">
-                <option value="">Experiencia</option>
-                <option value="junior">Junior</option>
-                <option value="mid">Mid</option>
-                <option value="senior">Senior</option>
-                <option value="lead">Lead</option>
-              </select>
-              <select v-model="jobTime" class="fi">
-                <option :value="0">Fecha</option>
-                <option :value="24">24 h</option>
-                <option :value="48">48 h</option>
-                <option :value="72">72 h</option>
-                <option :value="168">Esta semana</option>
-              </select>
-            </div>
-            <div class="frow">
-              <button v-for="m in [{v:'all',l:'Todos'},{v:'remote',l:'Remote'},{v:'hybrid',l:'Híbrido'}]" :key="m.v"
-                class="fpill" :class="{on: jobMode === m.v}" @click="jobMode = m.v">{{ m.l }}</button>
-              <div class="sep"></div>
-              <div class="toggle-wrap" @click="soloExclusivas = !soloExclusivas">
-                <div class="toggle-track" :class="{on: soloExclusivas}">
-                  <div class="toggle-thumb"></div>
-                </div>
-                <span class="toggle-label">Solo exclusivas</span>
-              </div>
-              <div class="sep"></div>
-              <select v-model="communitySource" class="fi" style="font-size:11.5px;padding:4px 7px">
+            <div class="flex items-center gap-2 flex-shrink-0">
+              <!-- Scrapear fuentes -->
+              <select v-model="communitySource"
+                      class="bg-surface-3 border border-edge-1 rounded text-[11px] text-zinc-500 px-2 py-1.5
+                             outline-none focus:border-edge-2 cursor-pointer">
                 <option value="all">Todas las fuentes</option>
                 <option value="rocketship">Remote Rocketship</option>
                 <option value="remoteok">RemoteOK</option>
                 <option value="remotive">Remotive</option>
                 <option value="wwr">We Work Remotely</option>
                 <option value="arbeitnow">Arbeitnow</option>
-                <option value="cryptojobslist">CryptoJobsList</option>
               </select>
-              <button class="fpill" :class="{on: scrapingCommunity}" @click="scrapeCommunity" :disabled="scrapingCommunity">
-                {{ scrapingCommunity ? 'Scrapeando…' : 'Scrapear' }}
+              <button @click="scrapeCommunity" :disabled="scrapingCommunity"
+                      class="flex items-center gap-1.5 px-3 py-1.5 rounded text-[11px] font-semibold
+                             bg-brand/90 text-white hover:bg-brand border border-brand/50
+                             disabled:opacity-40 disabled:cursor-not-allowed transition">
+                <svg v-if="scrapingCommunity" class="w-3 h-3 animate-spin" fill="none" viewBox="0 0 24 24">
+                  <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"/>
+                  <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"/>
+                </svg>
+                <span>{{ scrapingCommunity ? 'Scrapeando…' : '↻ Scrapear' }}</span>
               </button>
-              <span v-if="communityStatus" :style="{fontSize:'11px',color: communityStatusType==='error'?'#f87171': communityStatusType==='ok'?'#4ade80':'var(--t3)'}">{{ communityStatus }}</span>
-              <div style="margin-left:auto;display:flex;align-items:center;gap:8px">
-                <span class="stat" v-if="jobs.length">{{ filteredJobs.length }} / {{ jobs.length }}</span>
-                <span v-if="newJobsCount" style="font-size:11px;color:#4ade80">+{{ newJobsCount }} esta semana</span>
-              </div>
+              <span v-if="communityStatus"
+                    class="text-[10px]"
+                    :class="communityStatusType === 'ok' ? 'text-emerald-500' : 'text-red-500'">
+                {{ communityStatus }}
+              </span>
             </div>
           </div>
 
-          <!-- Job list -->
-          <div style="flex:1;overflow-y:auto">
-            <!-- Skeleton -->
-            <template v-if="jobsLoading">
-              <div v-for="i in 8" :key="i" style="display:flex;align-items:center;gap:11px;padding:11px 16px;border-bottom:1px solid var(--b1)">
-                <div class="sk" style="width:30px;height:30px;border-radius:5px;flex-shrink:0"></div>
-                <div style="flex:1">
-                  <div class="sk" :style="{height:'13px',width:(40+i*5)+'%',marginBottom:'6px'}"></div>
-                  <div class="sk" :style="{height:'11px',width:(20+i*3)+'%'}"></div>
-                </div>
-                <div class="sk" style="height:11px;width:28px"></div>
+          <!-- Barra de búsqueda grande (monospace) -->
+          <div class="relative mb-3">
+            <svg class="absolute left-4 top-1/2 -translate-y-1/2 w-4 h-4 text-zinc-600 pointer-events-none"
+                 fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.5">
+              <path stroke-linecap="round" stroke-linejoin="round"
+                    d="M21 21l-5.197-5.197m0 0A7.5 7.5 0 1 0 5.196 5.196a7.5 7.5 0 0 0 10.607 10.607Z"/>
+            </svg>
+            <input
+              type="search"
+              v-model="jobSearch"
+              placeholder="python developer · backend engineer · react senior latam…"
+              autocomplete="off"
+              spellcheck="false"
+              class="search-input w-full bg-surface-2 border border-edge-2 rounded-lg
+                     font-mono text-[14px] text-zinc-200 placeholder-zinc-700
+                     pl-11 pr-4 py-3.5 transition"
+            />
+            <kbd v-if="!jobSearch"
+                 class="absolute right-4 top-1/2 -translate-y-1/2 text-[9px] text-zinc-700
+                        border border-edge-2 rounded px-1.5 py-0.5 hidden sm:block">
+              buscar
+            </kbd>
+            <button v-else @click="jobSearch = ''"
+                    class="absolute right-4 top-1/2 -translate-y-1/2 text-zinc-600 hover:text-zinc-300 transition text-xs">
+              ✕
+            </button>
+          </div>
+
+          <!-- Fila de filtros + toggle exclusivas -->
+          <div class="flex items-center gap-2 flex-wrap">
+            <!-- Mode pills -->
+            <button v-for="m in [{v:'all',l:'Todos'},{v:'remote',l:'Remote'},{v:'hybrid',l:'Híbrido'}]"
+                    :key="m.v"
+                    @click="jobMode = m.v"
+                    class="mode-pill"
+                    :class="{ on: jobMode === m.v }">
+              {{ m.l }}
+            </button>
+
+            <div class="w-px h-3.5 bg-edge-2 mx-0.5"></div>
+
+            <!-- Seniority -->
+            <select v-model="jobSeniority"
+                    class="bg-surface-3 border border-edge-1 rounded text-[11px] text-zinc-500 px-2 py-1.5
+                           outline-none focus:border-edge-2 cursor-pointer">
+              <option value="">Experiencia</option>
+              <option value="junior">Junior</option>
+              <option value="mid">Mid</option>
+              <option value="senior">Senior</option>
+              <option value="lead">Lead / Staff</option>
+            </select>
+
+            <!-- Location -->
+            <select v-model="jobLocation"
+                    class="bg-surface-3 border border-edge-1 rounded text-[11px] text-zinc-500 px-2 py-1.5
+                           outline-none focus:border-edge-2 cursor-pointer">
+              <option value="">Ubicación</option>
+              <option value="remote">Remote</option>
+              <option value="argentina">Argentina</option>
+              <option value="latam">LATAM</option>
+              <option value="uruguay">Uruguay</option>
+              <option value="colombia">Colombia</option>
+              <option value="usa">USA</option>
+            </select>
+
+            <!-- Fecha -->
+            <select v-model="jobTime"
+                    class="bg-surface-3 border border-edge-1 rounded text-[11px] text-zinc-500 px-2 py-1.5
+                           outline-none focus:border-edge-2 cursor-pointer">
+              <option :value="0">Fecha</option>
+              <option :value="24">24 h</option>
+              <option :value="48">48 h</option>
+              <option :value="72">72 h</option>
+              <option :value="168">Esta semana</option>
+            </select>
+
+            <div class="w-px h-3.5 bg-edge-2 mx-0.5"></div>
+
+            <!-- ── Toggle ✨ Exclusivas ── -->
+            <button @click="soloExclusivas = !soloExclusivas"
+                    class="flex items-center gap-2 group cursor-pointer select-none">
+              <!-- Track + thumb -->
+              <div class="toggle-track relative w-8 h-[18px] rounded-full border border-edge-2"
+                   :class="soloExclusivas ? 'on' : 'bg-surface-3'">
+                <div class="toggle-thumb absolute top-[3px] left-[3px] w-3 h-3 rounded-full"
+                     :class="soloExclusivas ? 'bg-white' : 'bg-zinc-600'"></div>
               </div>
-            </template>
-            <template v-else-if="filteredJobs.length">
-              <a v-for="job in filteredJobs.slice(0, displayLimit)" :key="job.job_url"
-                :href="job.job_url || '#'" target="_blank" rel="noopener noreferrer" class="job-card">
-                <div class="job-ico">
-                  <img v-if="faviconOf(job)" :src="faviconOf(job)" alt="" loading="lazy"
-                    @error="e => { e.target.style.display='none' }">
-                  <span v-else>{{ initOf(job) }}</span>
+              <span class="text-[11px] font-medium transition"
+                    :class="soloExclusivas ? 'text-violet-400' : 'text-zinc-600 group-hover:text-zinc-400'">
+                ✨ Solo ofertas exclusivas
+                <span class="opacity-60 font-normal">(No en LinkedIn)</span>
+              </span>
+            </button>
+
+            <!-- Stat rápido -->
+            <div class="ml-auto flex items-center gap-2">
+              <span v-if="newJobsCount" class="text-[10px] text-emerald-500 font-medium">
+                ⚡ {{ newJobsCount }} esta semana
+              </span>
+            </div>
+          </div>
+        </div>
+
+        <!-- ── #instant-results-container ── -->
+        <div id="instant-results-container" class="flex-1 overflow-y-auto min-h-0">
+
+          <!-- Loading skeleton -->
+          <template v-if="jobsLoading">
+            <div v-for="i in 12" :key="i"
+                 class="flex items-center gap-3 px-6 py-3 border-b border-edge-1">
+              <div class="skeleton w-[30px] h-[30px] rounded-md flex-shrink-0"></div>
+              <div class="flex-1 space-y-2">
+                <div class="skeleton h-3 rounded" :style="{ width: (40 + (i * 7) % 35) + '%' }"></div>
+                <div class="skeleton h-2.5 rounded" :style="{ width: (20 + (i * 5) % 25) + '%' }"></div>
+              </div>
+              <div class="skeleton h-2.5 w-10 rounded"></div>
+            </div>
+          </template>
+
+          <!-- Resultados -->
+          <template v-else-if="filteredJobs.length">
+            <!-- Header de columnas (fijo) -->
+            <div class="flex items-center gap-3 px-6 py-1.5 border-b border-edge-1 bg-surface-1 sticky top-0 z-10">
+              <div class="w-[30px] flex-shrink-0"></div>
+              <div class="flex-1 text-[9px] uppercase tracking-widest text-zinc-700 font-semibold">Puesto</div>
+              <div class="w-32 hidden md:block text-[9px] uppercase tracking-widest text-zinc-700 font-semibold">Empresa</div>
+              <div class="w-24 hidden lg:block text-[9px] uppercase tracking-widest text-zinc-700 font-semibold">Tipo</div>
+              <div class="w-16 text-[9px] uppercase tracking-widest text-zinc-700 font-semibold text-right">Hace</div>
+              <div class="w-16 flex-shrink-0"></div>
+            </div>
+
+            <!-- Job rows -->
+            <a v-for="job in filteredJobs.slice(0, displayLimit)"
+               :key="job.job_url"
+               :href="job.job_url || '#'"
+               target="_blank"
+               rel="noopener noreferrer"
+               class="job-row flex items-center gap-3 px-6 py-2.5 border-b border-edge-1 cursor-pointer group">
+
+              <!-- Favicon / initial -->
+              <div class="w-[30px] h-[30px] flex-shrink-0 rounded-md bg-surface-3 border border-edge-1
+                          flex items-center justify-center overflow-hidden">
+                <img v-if="faviconOf(job)" :src="faviconOf(job)" alt="" loading="lazy"
+                     class="w-full h-full object-contain"
+                     @error="e => e.target.style.display='none'">
+                <span class="text-zinc-600 text-[11px] font-bold select-none">{{ initOf(job) }}</span>
+              </div>
+
+              <!-- Título + badges inline -->
+              <div class="flex-1 min-w-0 flex items-center gap-2 flex-wrap">
+                <span class="job-title-text text-[13px] font-medium text-zinc-300 truncate transition-colors leading-none">
+                  {{ job.title }}
+                </span>
+                <span v-if="job.not_on_linkedin" class="badge badge-excl flex-shrink-0">excl.</span>
+                <span v-if="locOf(job)" class="badge flex-shrink-0" :class="locOf(job).cls">{{ locOf(job).label }}</span>
+                <span v-if="senOf(job)" class="badge flex-shrink-0" :class="senOf(job).cls">{{ senOf(job).label }}</span>
+              </div>
+
+              <!-- Empresa -->
+              <div class="w-32 hidden md:block flex-shrink-0 truncate text-[11.5px] text-zinc-600">
+                {{ job.company }}
+              </div>
+
+              <!-- Modalidad inferred -->
+              <div class="w-24 hidden lg:block flex-shrink-0">
+                <span v-if="/remote|remoto|anywhere|worldwide/i.test((job.title||'')+(job.job_url||''))"
+                      class="text-[10px] text-emerald-600">remote</span>
+                <span v-else-if="/hybrid|híbrido/i.test(job.title||'')"
+                      class="text-[10px] text-sky-600">hybrid</span>
+                <span v-else class="text-[10px] text-zinc-700">—</span>
+              </div>
+
+              <!-- Tiempo relativo -->
+              <div class="w-16 flex-shrink-0 text-right">
+                <span class="text-[11px] tabular-nums"
+                      :class="timeOf(job).hot ? 'text-amber-500' : 'text-zinc-700'">
+                  {{ timeOf(job).text }}
+                </span>
+              </div>
+
+              <!-- Apply button (aparece en hover) -->
+              <div class="w-16 flex-shrink-0 flex justify-end">
+                <span class="apply-btn text-[10px] font-semibold text-violet-500 border border-violet-900/60
+                             rounded px-2 py-0.5 bg-violet-950/40 hover:bg-violet-900/40 transition">
+                  Apply →
+                </span>
+              </div>
+            </a>
+
+            <!-- Load more -->
+            <div v-if="filteredJobs.length > displayLimit" class="py-5 text-center border-b border-edge-1">
+              <button @click="displayLimit += 100"
+                      class="text-[11px] text-zinc-600 hover:text-zinc-300 border border-edge-2
+                             rounded px-4 py-1.5 transition hover:border-edge-3">
+                Ver {{ filteredJobs.length - displayLimit }} más ↓
+              </button>
+            </div>
+          </template>
+
+          <!-- Empty state -->
+          <div v-else class="flex flex-col items-center justify-center h-full py-24 text-center">
+            <div class="text-5xl mb-4 opacity-20">⚡</div>
+            <p class="text-[13px] text-zinc-600">Sin resultados</p>
+            <p class="text-[11px] text-zinc-700 mt-1">Ajustá los filtros o scrapear fuentes externas</p>
+          </div>
+
+        </div><!-- /#instant-results-container -->
+      </div><!-- /buscador -->
+
+      <!-- ══ PANEL: MÉTRICAS ══════════════════════════ -->
+      <div v-show="panel === 'metricas'" class="flex-1 overflow-y-auto p-6">
+        <div class="max-w-3xl mx-auto">
+          <div class="mb-6">
+            <h1 class="text-white text-[15px] font-bold">📊 Métricas</h1>
+            <p class="text-[11px] text-zinc-600 mt-0.5">Estado del pipeline y actividad del scraper</p>
+          </div>
+
+          <!-- Stat cards -->
+          <div class="grid grid-cols-2 lg:grid-cols-4 gap-3 mb-6">
+            <div class="metric-card">
+              <div class="text-[9px] uppercase tracking-widest text-zinc-600 mb-1.5">Total Empleos</div>
+              <div class="text-2xl font-bold text-white tabular-nums">{{ jobs.length }}</div>
+              <div class="text-[10px] text-zinc-700 mt-1">en sent_jobs</div>
+            </div>
+            <div class="metric-card">
+              <div class="text-[9px] uppercase tracking-widest text-zinc-600 mb-1.5">Esta Semana</div>
+              <div class="text-2xl font-bold text-emerald-400 tabular-nums">{{ newJobsCount }}</div>
+              <div class="text-[10px] text-zinc-700 mt-1">últimos 7 días</div>
+            </div>
+            <div class="metric-card">
+              <div class="text-[9px] uppercase tracking-widest text-zinc-600 mb-1.5">Fuentes Activas</div>
+              <div class="text-2xl font-bold text-violet-400 tabular-nums">{{ fuentes.length }}</div>
+              <div class="text-[10px] text-zinc-700 mt-1">dominios indexados</div>
+            </div>
+            <div class="metric-card">
+              <div class="text-[9px] uppercase tracking-widest text-zinc-600 mb-1.5">Miembros</div>
+              <div class="text-2xl font-bold text-sky-400 tabular-nums">{{ members.length }}</div>
+              <div class="text-[10px] text-zinc-700 mt-1">búsquedas activas</div>
+            </div>
+          </div>
+
+          <!-- Últimas 10 ofertas -->
+          <div class="border border-edge-1 rounded-lg overflow-hidden bg-surface-2 mb-4">
+            <div class="px-4 py-3 border-b border-edge-1 flex items-center justify-between">
+              <span class="text-[11px] font-semibold text-zinc-300">Últimas ofertas indexadas</span>
+              <span class="text-[10px] text-zinc-700">sent_jobs ↓</span>
+            </div>
+            <div v-if="jobs.length">
+              <div v-for="job in jobs.slice(0, 10)" :key="job.job_url"
+                   class="flex items-center gap-3 px-4 py-2.5 border-b border-edge-1 last:border-0">
+                <div class="w-2 h-2 rounded-full bg-violet-600 flex-shrink-0"></div>
+                <div class="flex-1 min-w-0">
+                  <div class="text-[12px] text-zinc-300 truncate">{{ job.title }}</div>
+                  <div class="text-[10px] text-zinc-700">{{ job.company }}</div>
                 </div>
-                <div class="job-body">
-                  <div class="job-title">{{ job.title }}</div>
-                  <div class="job-meta">
-                    <span class="job-co" v-if="job.company">{{ job.company }}</span>
-                    <template v-if="locOf(job)">
-                      <span style="color:var(--t3);font-size:10px">·</span>
-                      <span class="badge" :class="locOf(job).cls">{{ locOf(job).label }}</span>
-                    </template>
-                    <template v-if="senOf(job)">
-                      <span style="color:var(--t3);font-size:10px">·</span>
-                      <span class="badge" :class="senOf(job).cls">{{ senOf(job).label }}</span>
-                    </template>
-                    <span v-if="job.not_on_linkedin" class="badge b-violet">Exclusiva</span>
+                <div class="text-[10px] text-zinc-700 tabular-nums flex-shrink-0">{{ timeOf(job).text }}</div>
+              </div>
+            </div>
+            <div v-else class="py-10 text-center text-[11px] text-zinc-700">
+              Cargando datos…
+            </div>
+          </div>
+
+          <!-- Miembros table -->
+          <div class="border border-edge-1 rounded-lg overflow-hidden bg-surface-2">
+            <div class="px-4 py-3 border-b border-edge-1">
+              <span class="text-[11px] font-semibold text-zinc-300">Miembros registrados</span>
+            </div>
+            <div v-if="membersLoading" class="p-4 space-y-2">
+              <div v-for="i in 3" :key="i" class="skeleton h-8 w-full rounded"></div>
+            </div>
+            <table v-else-if="members.length" class="w-full text-left">
+              <thead>
+                <tr class="border-b border-edge-1">
+                  <th class="px-4 py-2 text-[9px] uppercase tracking-widest text-zinc-700 font-semibold">Usuario</th>
+                  <th class="px-4 py-2 text-[9px] uppercase tracking-widest text-zinc-700 font-semibold">Stack</th>
+                  <th class="px-4 py-2 text-[9px] uppercase tracking-widest text-zinc-700 font-semibold">Ubicación</th>
+                  <th class="px-4 py-2 text-right text-[9px] uppercase tracking-widest text-zinc-700 font-semibold">Acciones</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr v-for="m in members" :key="m.id" class="border-b border-edge-1 last:border-0 hover:bg-surface-3 transition">
+                  <td class="px-4 py-2.5 text-violet-400 text-[12px]">@{{ m.telegram_user }}</td>
+                  <td class="px-4 py-2.5">
+                    <div class="flex flex-wrap gap-1">
+                      <span v-for="t in techsOf(m).slice(0,3)" :key="t"
+                            class="text-[10px] border border-edge-2 rounded px-1.5 py-0.5 text-zinc-500">{{ t }}</span>
+                    </div>
+                  </td>
+                  <td class="px-4 py-2.5 text-[11px] text-zinc-600">{{ m.location }}</td>
+                  <td class="px-4 py-2.5 text-right">
+                    <button @click="openEdit(m)" class="text-[10px] text-zinc-600 hover:text-zinc-300 transition mr-2">editar</button>
+                    <button @click="deleteMember(m.id, m.telegram_user)" class="text-[10px] text-zinc-700 hover:text-red-500 transition">eliminar</button>
+                  </td>
+                </tr>
+              </tbody>
+            </table>
+            <div v-else class="py-10 text-center text-[11px] text-zinc-700">Sin miembros registrados</div>
+          </div>
+        </div>
+      </div><!-- /metricas -->
+
+      <!-- ══ PANEL: FEED EXTERNO ══════════════════════ -->
+      <div v-show="panel === 'feed'" class="flex-1 overflow-y-auto p-6">
+        <div class="max-w-3xl mx-auto">
+          <div class="mb-6 flex items-start justify-between">
+            <div>
+              <h1 class="text-white text-[15px] font-bold">🌐 Feed Externo</h1>
+              <p class="text-[11px] text-zinc-600 mt-0.5">Dominios escrapeados en cada ejecución del pipeline</p>
+            </div>
+            <span class="text-[10px] border border-edge-2 rounded-full px-2.5 py-0.5 text-zinc-600">
+              {{ fuentes.length }} dominios
+            </span>
+          </div>
+
+          <div class="grid grid-cols-1 lg:grid-cols-2 gap-4">
+            <!-- Lista de fuentes -->
+            <div class="border border-edge-1 rounded-lg bg-surface-2 overflow-hidden">
+              <div class="px-4 py-3 border-b border-edge-1">
+                <div class="relative">
+                  <svg class="absolute left-2.5 top-1/2 -translate-y-1/2 w-3 h-3 text-zinc-700 pointer-events-none"
+                       fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+                    <path stroke-linecap="round" stroke-linejoin="round" d="M21 21l-4.35-4.35M17 11A6 6 0 115 11a6 6 0 0112 0z"/>
+                  </svg>
+                  <input v-model="fuentesSearch" type="search" placeholder="Filtrar dominios…"
+                         class="w-full bg-surface-3 border border-edge-1 rounded text-[12px] text-zinc-400
+                                placeholder-zinc-700 pl-7 pr-3 py-1.5 outline-none focus:border-edge-2"/>
+                </div>
+              </div>
+              <div class="max-h-[360px] overflow-y-auto p-1">
+                <template v-if="fuentesLoading">
+                  <div v-for="i in 6" :key="i" class="skeleton h-8 w-full mb-1 rounded"></div>
+                </template>
+                <template v-else-if="filteredFuentes.length">
+                  <div v-for="f in filteredFuentes" :key="f.id"
+                       class="group flex items-center justify-between px-3 py-2 rounded hover:bg-surface-3 transition">
+                    <div class="flex items-center gap-2.5 min-w-0">
+                      <span class="w-1.5 h-1.5 rounded-full bg-violet-600 flex-shrink-0"></span>
+                      <span class="text-[12px] text-zinc-500 font-mono truncate">{{ f.domain }}</span>
+                    </div>
+                    <button @click="deleteFuente(f.id, f.domain)"
+                            class="opacity-0 group-hover:opacity-100 text-zinc-700 hover:text-red-500 transition text-xs px-1">
+                      ✕
+                    </button>
+                  </div>
+                </template>
+                <div v-else class="py-8 text-center text-[11px] text-zinc-700">Sin fuentes</div>
+              </div>
+            </div>
+
+            <!-- Agregar fuentes -->
+            <div class="border border-edge-1 rounded-lg bg-surface-2 overflow-hidden">
+              <button @click="fuentesOpen = !fuentesOpen"
+                      class="w-full flex items-center justify-between px-4 py-3 text-left hover:bg-surface-3 transition border-b border-edge-1">
+                <span class="text-[12.5px] font-medium text-zinc-400">+ Agregar fuentes</span>
+                <span class="text-zinc-700 text-xs">{{ fuentesOpen ? '▲' : '▼' }}</span>
+              </button>
+              <div v-show="fuentesOpen" class="p-4 space-y-3">
+                <div>
+                  <label class="block text-[9px] uppercase tracking-widest text-zinc-600 mb-1.5">CSV / Excel</label>
+                  <input type="file" accept=".csv,.xlsx,.xls" @change="handleFile"
+                         class="w-full text-[11px] text-zinc-500 cursor-pointer"/>
+                </div>
+                <div>
+                  <label class="block text-[9px] uppercase tracking-widest text-zinc-600 mb-1.5">URLs (una por línea)</label>
+                  <textarea v-model="manualUrls" rows="4" placeholder="https://jobs.example.com"
+                            class="field text-[12px] resize-none"></textarea>
+                </div>
+                <button @click="processUrls"
+                        class="w-full py-1.5 text-[11px] border border-edge-2 rounded text-zinc-500
+                               hover:text-zinc-300 hover:border-edge-3 transition">
+                  Extraer dominios
+                </button>
+                <template v-if="parsedDomains.length">
+                  <div class="text-[10px] text-zinc-600">{{ parsedDomains.length }} dominios extraídos</div>
+                  <div class="flex flex-wrap gap-1">
+                    <span v-for="d in parsedDomains" :key="d"
+                          class="text-[10px] border border-edge-2 rounded px-1.5 py-0.5 text-zinc-600 font-mono">{{ d }}</span>
+                  </div>
+                  <button @click="validateDomains"
+                          class="w-full py-1.5 text-[11px] bg-brand/80 hover:bg-brand text-white rounded transition">
+                    Validar contra el sistema
+                  </button>
+                </template>
+                <template v-if="validationDone">
+                  <div v-if="alreadyDomains.length" class="text-[10px] text-emerald-600">
+                    ✓ Ya en el sistema ({{ alreadyDomains.length }})
+                  </div>
+                  <div v-if="newDomains.length">
+                    <div class="text-[10px] text-yellow-600 mb-1">+ Nuevos ({{ newDomains.length }})</div>
+                    <div class="border border-edge-1 rounded divide-y divide-edge-1 max-h-40 overflow-y-auto">
+                      <label v-for="d in newDomains" :key="d"
+                             class="flex items-center gap-2 px-3 py-1.5 cursor-pointer hover:bg-surface-3 transition">
+                        <input type="checkbox" :value="d" v-model="selectedDomains"
+                               class="accent-violet-500" style="width:auto;padding:0"/>
+                        <span class="text-[11px] font-mono text-zinc-500">{{ d }}</span>
+                      </label>
+                    </div>
+                    <button @click="saveDomains" :disabled="!selectedDomains.length || savingDomains"
+                            class="mt-2 w-full py-1.5 text-[11px] bg-brand/80 hover:bg-brand text-white
+                                   rounded disabled:opacity-40 transition">
+                      {{ savingDomains ? 'Guardando…' : 'Agregar seleccionadas' }}
+                    </button>
+                  </div>
+                </template>
+                <div v-if="saveDomainsOk" class="text-[11px] text-emerald-500 border border-emerald-900/40 rounded px-3 py-2 bg-emerald-950/30">
+                  Fuentes agregadas correctamente.
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div><!-- /feed -->
+
+      <!-- ══ PANEL: CONFIG (Configurar Búsqueda) ══════ -->
+      <div v-show="panel === 'config'" class="flex-1 overflow-y-auto p-6">
+        <div class="max-w-lg mx-auto">
+          <div class="mb-6">
+            <h1 class="text-white text-[15px] font-bold">⚙️ Configurar Búsqueda</h1>
+            <p class="text-[11px] text-zinc-600 mt-0.5">Criterios para el scraper de Telegram</p>
+          </div>
+          <div class="border border-edge-1 rounded-lg bg-surface-2 p-6">
+            <form @submit.prevent="submitForm" class="space-y-5">
+
+              <div>
+                <label class="block text-[9px] uppercase tracking-widest text-zinc-600 mb-1.5">Tecnologías</label>
+                <input type="text" v-model="form.tech_stack" placeholder="Python, FastAPI, PostgreSQL…" required class="field"/>
+                <div class="text-[10px] text-zinc-700 mt-1">Separadas por comas</div>
+                <!-- Tech cloud -->
+                <div v-if="techCloud.length" class="mt-3 p-3 bg-surface-3 border border-edge-1 rounded">
+                  <div class="text-[9px] text-zinc-700 mb-2">Buscadas por otros miembros · clic para agregar</div>
+                  <div class="flex flex-wrap gap-1 mb-2">
+                    <button v-for="t in techCloud" :key="t" type="button" @click="addTechTag(t)"
+                            class="text-[10px] border border-edge-2 rounded px-2 py-0.5 text-zinc-600
+                                   hover:border-violet-700 hover:text-violet-400 transition">{{ t }}</button>
+                  </div>
+                  <div class="flex gap-2 mt-2">
+                    <input v-model="newTag" @keydown.enter.prevent="addNewTag" type="text"
+                           placeholder="Nuevo tag…" class="field text-[12px] py-1"/>
+                    <button type="button" @click="addNewTag"
+                            class="flex-shrink-0 text-[11px] border border-edge-2 rounded px-3 hover:border-edge-3 hover:text-zinc-300 transition">+</button>
                   </div>
                 </div>
-                <div class="job-time" :class="{hot: timeOf(job).hot}">{{ timeOf(job).text }}</div>
-              </a>
-              <div v-if="filteredJobs.length > displayLimit" style="padding:14px;text-align:center">
-                <button class="btn btn-ghost btn-sm" @click="displayLimit += 100">
-                  Ver más ({{ filteredJobs.length - displayLimit }} restantes)
-                </button>
               </div>
-            </template>
-            <div v-else class="empty">
-              <div style="font-size:24px;margin-bottom:8px">·</div>
-              Sin resultados. Ajustá los filtros.
+
+              <div>
+                <label class="block text-[9px] uppercase tracking-widest text-zinc-600 mb-2">Modalidad</label>
+                <div class="flex gap-4">
+                  <label v-for="opt in [{v:'remote',l:'Remoto'},{v:'hybrid',l:'Híbrido'},{v:'on-site',l:'Presencial'}]"
+                         :key="opt.v" class="flex items-center gap-1.5 cursor-pointer select-none text-[12.5px] text-zinc-400">
+                    <input type="checkbox" v-model="form.job_type" :value="opt.v" class="accent-violet-500" style="width:auto;padding:0"/>
+                    {{ opt.l }}
+                  </label>
+                </div>
+                <div v-if="formSubmitted && !form.job_type.length" class="text-[10px] text-red-500 mt-1">
+                  Seleccioná al menos una modalidad.
+                </div>
+              </div>
+
+              <div>
+                <label class="block text-[9px] uppercase tracking-widest text-zinc-600 mb-1.5">Ubicación</label>
+                <input type="text" v-model="form.location" placeholder="Argentina, Buenos Aires…" required class="field"/>
+                <div class="flex flex-wrap gap-1 mt-2">
+                  <button v-for="loc in ['Argentina','Uruguay','Latin America','Latam']" :key="loc"
+                          type="button" @click="form.location = loc"
+                          class="text-[10px] border border-edge-2 rounded-full px-2.5 py-0.5 text-zinc-600
+                                 hover:border-violet-700 hover:text-violet-400 transition"
+                          :class="form.location === loc ? 'border-violet-700 text-violet-400' : ''">
+                    {{ loc }}
+                  </button>
+                </div>
+              </div>
+
+              <div>
+                <label class="block text-[9px] uppercase tracking-widest text-zinc-600 mb-1.5">Usuario de Telegram</label>
+                <div class="relative">
+                  <span class="absolute left-3 top-1/2 -translate-y-1/2 text-zinc-600 pointer-events-none text-[13px]">@</span>
+                  <input type="text" v-model="form.telegram_user" placeholder="tuusuario" required class="field pl-6"/>
+                </div>
+                <div class="text-[10px] text-zinc-700 mt-1">Sin el símbolo @</div>
+              </div>
+
+              <button type="submit" :disabled="formLoading"
+                      class="w-full py-2.5 bg-brand hover:bg-brand-dim text-white text-[13px] font-semibold
+                             rounded transition disabled:opacity-40">
+                {{ formLoading ? 'Guardando…' : 'Guardar criterios' }}
+              </button>
+            </form>
+            <div v-if="formError"   class="mt-3 text-[11px] text-red-400 bg-red-950/40 border border-red-900/40 rounded px-3 py-2">{{ formError }}</div>
+            <div v-if="formSuccess" class="mt-3 text-[11px] text-emerald-400 bg-emerald-950/40 border border-emerald-900/40 rounded px-3 py-2">
+              {{ formSuccess }}
+              <a :href="TELEGRAM_LINK" target="_blank" class="underline opacity-70 block mt-1">Canal de Telegram →</a>
             </div>
           </div>
-
-        </div><!-- /buscador -->
-
-      </div><!-- /content -->
-    </div><!-- /body -->
-
-    <!-- Modal edición -->
-    <div class="modal-bg" v-if="editModal" @click.self="closeEdit">
-      <div class="modal-box card card-body">
-        <div style="font-size:13px;font-weight:600;color:var(--w);margin-bottom:16px;display:flex;justify-content:space-between;align-items:center">
-          Editar criterios
-          <button class="btn btn-muted btn-sm" @click="closeEdit" style="padding:2px 6px">✕</button>
         </div>
-        <div class="field-group">
-          <label class="field-label">Tecnologías</label>
-          <input type="text" v-model="editTech">
-        </div>
-        <div class="field-group">
-          <label class="field-label">Modalidad</label>
-          <div class="check-row">
-            <label class="check-item"><input type="checkbox" v-model="editJobType" value="remote"> Remoto</label>
-            <label class="check-item"><input type="checkbox" v-model="editJobType" value="hybrid"> Híbrido</label>
-            <label class="check-item"><input type="checkbox" v-model="editJobType" value="on-site"> Presencial</label>
+      </div><!-- /config -->
+
+      <!-- ══ PANEL: MIEMBROS (solo tabla, accesible desde config) ══ -->
+      <div v-show="panel === 'miembros'" class="flex-1 overflow-y-auto p-6">
+        <div class="max-w-4xl mx-auto">
+          <div class="mb-5 flex items-center justify-between">
+            <div>
+              <h1 class="text-white text-[15px] font-bold">👥 Miembros</h1>
+              <p class="text-[11px] text-zinc-600 mt-0.5">Criterios activos por usuario</p>
+            </div>
+            <span class="text-[10px] border border-edge-2 rounded-full px-2.5 py-0.5 text-zinc-600">{{ members.length }}</span>
+          </div>
+          <div class="border border-edge-1 rounded-lg bg-surface-2 overflow-hidden">
+            <div class="overflow-x-auto">
+              <table class="w-full">
+                <thead>
+                  <tr class="border-b border-edge-1">
+                    <th class="px-4 py-2.5 text-left text-[9px] uppercase tracking-widest text-zinc-700 font-semibold">Usuario</th>
+                    <th class="px-4 py-2.5 text-left text-[9px] uppercase tracking-widest text-zinc-700 font-semibold">Stack</th>
+                    <th class="px-4 py-2.5 text-left text-[9px] uppercase tracking-widest text-zinc-700 font-semibold">Modalidad</th>
+                    <th class="px-4 py-2.5 text-left text-[9px] uppercase tracking-widest text-zinc-700 font-semibold">Ubicación</th>
+                    <th class="px-4 py-2.5 text-right text-[9px] uppercase tracking-widest text-zinc-700 font-semibold">Acciones</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  <template v-if="membersLoading">
+                    <tr v-for="i in 4" :key="i" class="border-b border-edge-1">
+                      <td class="px-4 py-3"><div class="skeleton h-3 w-24 rounded"></div></td>
+                      <td class="px-4 py-3"><div class="skeleton h-3 w-32 rounded"></div></td>
+                      <td class="px-4 py-3"><div class="skeleton h-3 w-16 rounded"></div></td>
+                      <td class="px-4 py-3"><div class="skeleton h-3 w-20 rounded"></div></td>
+                      <td></td>
+                    </tr>
+                  </template>
+                  <template v-else-if="members.length">
+                    <tr v-for="m in members" :key="m.id" class="border-b border-edge-1 last:border-0 hover:bg-surface-3 transition">
+                      <td class="px-4 py-2.5 text-violet-400 text-[12px]">@{{ m.telegram_user }}</td>
+                      <td class="px-4 py-2.5">
+                        <div class="flex flex-wrap gap-1">
+                          <span v-for="t in techsOf(m)" :key="t"
+                                class="text-[10px] border border-edge-2 rounded px-1.5 py-0.5 text-zinc-500">{{ t }}</span>
+                        </div>
+                      </td>
+                      <td class="px-4 py-2.5 text-[11px] text-zinc-600">{{ jobTypeLabel(m.job_type) }}</td>
+                      <td class="px-4 py-2.5 text-[11px] text-zinc-600">{{ m.location }}</td>
+                      <td class="px-4 py-2.5 text-right flex items-center justify-end gap-2">
+                        <button @click="openEdit(m)" class="text-[11px] text-zinc-600 hover:text-zinc-300 border border-edge-2 rounded px-2 py-0.5 transition">Editar</button>
+                        <button @click="deleteMember(m.id, m.telegram_user)" class="text-[11px] text-zinc-700 hover:text-red-500 border border-edge-1 rounded px-2 py-0.5 transition">Eliminar</button>
+                      </td>
+                    </tr>
+                  </template>
+                  <tr v-else>
+                    <td colspan="5" class="py-16 text-center text-[11px] text-zinc-700">Sin miembros registrados</td>
+                  </tr>
+                </tbody>
+              </table>
+            </div>
           </div>
         </div>
-        <div class="field-group">
-          <label class="field-label">Ubicación</label>
-          <input type="text" v-model="editLocation">
+      </div><!-- /miembros -->
+
+    </div><!-- /content -->
+
+    <!-- ── Modal edición ───────────────────────────── -->
+    <div v-if="editModal"
+         class="fixed inset-0 z-50 flex items-center justify-center bg-black/70 backdrop-blur-sm px-4"
+         @click.self="closeEdit">
+      <div class="w-full max-w-sm bg-surface-2 border border-edge-2 rounded-lg p-5 space-y-4">
+        <div class="flex items-center justify-between">
+          <span class="text-[13px] font-semibold text-zinc-200">Editar criterios</span>
+          <button @click="closeEdit" class="text-zinc-600 hover:text-zinc-300 text-sm transition">✕</button>
         </div>
-        <div class="err" v-if="editError">{{ editError }}</div>
-        <div style="display:flex;gap:8px;margin-top:4px">
-          <button class="btn btn-primary" style="flex:1" :disabled="editLoading" @click="saveEdit">
+        <div>
+          <label class="block text-[9px] uppercase tracking-widest text-zinc-600 mb-1.5">Tecnologías</label>
+          <input type="text" v-model="editTech" class="field"/>
+        </div>
+        <div>
+          <label class="block text-[9px] uppercase tracking-widest text-zinc-600 mb-2">Modalidad</label>
+          <div class="flex gap-4">
+            <label v-for="opt in [{v:'remote',l:'Remoto'},{v:'hybrid',l:'Híbrido'},{v:'on-site',l:'Presencial'}]"
+                   :key="opt.v" class="flex items-center gap-1.5 cursor-pointer select-none text-[12px] text-zinc-400">
+              <input type="checkbox" v-model="editJobType" :value="opt.v" class="accent-violet-500" style="width:auto;padding:0"/>
+              {{ opt.l }}
+            </label>
+          </div>
+        </div>
+        <div>
+          <label class="block text-[9px] uppercase tracking-widest text-zinc-600 mb-1.5">Ubicación</label>
+          <input type="text" v-model="editLocation" class="field"/>
+        </div>
+        <div v-if="editError" class="text-[11px] text-red-400 bg-red-950/40 border border-red-900/40 rounded px-3 py-2">{{ editError }}</div>
+        <div class="flex gap-2 pt-1">
+          <button @click="saveEdit" :disabled="editLoading"
+                  class="flex-1 py-2 bg-brand hover:bg-brand-dim text-white text-[12px] font-semibold rounded transition disabled:opacity-40">
             {{ editLoading ? 'Guardando…' : 'Guardar' }}
           </button>
-          <button class="btn btn-ghost" style="flex:1" @click="closeEdit">Cancelar</button>
+          <button @click="closeEdit"
+                  class="flex-1 py-2 border border-edge-2 text-zinc-500 hover:text-zinc-300 hover:border-edge-3 text-[12px] rounded transition">
+            Cancelar
+          </button>
         </div>
       </div>
     </div>
 
-  </template><!-- /dashboard -->
-
+  </div><!-- /dashboard -->
 </div><!-- #app -->
 
+<!-- ── Scripts ──────────────────────────────────────── -->
 <script src="https://cdn.jsdelivr.net/npm/vue@3/dist/vue.global.prod.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js" defer></script>
@@ -782,8 +931,7 @@ const TELEGRAM_LINK     = "https://t.me/+qUKDg8Nc1B5hOWNh";
 
 const { createClient } = supabase;
 const db = createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
-
-const { createApp, computed } = Vue;
+const { createApp } = Vue;
 
 createApp({
   data() {
@@ -791,33 +939,33 @@ createApp({
       TELEGRAM_LINK,
       session: null,
 
-      // Login
+      /* Auth */
       loginEmail: '', loginPassword: '', loginLoading: false, loginError: '',
       logoutLoading: false,
 
-      // Panel
-      panel: 'busqueda',
+      /* Navigation */
+      panel: 'buscador',
 
-      // Búsqueda form
-      form: { tech_stack: '', job_type: [], location: '', telegram_user: '' },
-      formLoading: false, formError: '', formSuccess: '', formSubmitted: false,
-      techCloud: [], newTag: '',
+      /* Search form (config) */
+      form:         { tech_stack: '', job_type: [], location: '', telegram_user: '' },
+      formLoading:  false, formError: '', formSuccess: '', formSubmitted: false,
+      techCloud:    [], newTag: '',
 
-      // Miembros
+      /* Members */
       members: [], membersLoading: false,
 
-      // Edit modal
+      /* Edit modal */
       editModal: false, editRow: null,
       editTech: '', editLocation: '', editJobType: [],
       editLoading: false, editError: '',
 
-      // Fuentes
+      /* Fuentes */
       fuentes: [], fuentesLoading: false, fuentesSearch: '', fuentesOpen: false,
       manualUrls: '', parsedDomains: [], alreadyDomains: [], newDomains: [],
       selectedDomains: [], validationDone: false,
       savingDomains: false, saveDomainsOk: false, saveDomainsErr: '',
 
-      // Buscador
+      /* Buscador */
       jobs: [], jobsLoading: false, displayLimit: 100,
       jobSearch: '', jobLocation: '', jobSeniority: '', jobTime: 0,
       jobMode: 'all', soloExclusivas: false,
@@ -842,7 +990,7 @@ createApp({
         const cutoff = Date.now() - this.jobTime * 3_600_000;
         j = j.filter(x => new Date(x.sent_at).getTime() >= cutoff);
       }
-      if (q) j = j.filter(x => `${x.title} ${x.company} ${x.job_url}`.toLowerCase().includes(q));
+      if (q)   j = j.filter(x => `${x.title} ${x.company} ${x.job_url}`.toLowerCase().includes(q));
       if (loc) j = j.filter(x => `${x.title} ${x.company} ${x.job_url}`.toLowerCase().includes(loc));
 
       if (this.jobMode === 'remote')
@@ -850,16 +998,15 @@ createApp({
       else if (this.jobMode === 'hybrid')
         j = j.filter(x => /\b(h[íi]brido|hybrid)\b/i.test(x.title ?? ''));
 
-      if (sen) {
-        const map = {
-          junior: /\b(junior|jr\.?|entry[\s-]level|intern|trainee)\b/i,
-          mid:    /\b(mid[\s-]?level|semi[\s-]?senior|ssr|pleno|middle)\b/i,
-          senior: /\b(senior|sr\.?)\b/i,
-          lead:   /\b(lead|staff|principal|architect|director|head of|manager|vp|chief)\b/i,
-        };
-        if (map[sen]) j = j.filter(x => map[sen].test(x.title ?? ''));
-      }
+      const senMap = {
+        junior: /\b(junior|jr\.?|entry[\s-]level|intern|trainee)\b/i,
+        mid:    /\b(mid[\s-]?level|semi[\s-]?senior|ssr|pleno|middle)\b/i,
+        senior: /\b(senior|sr\.?)\b/i,
+        lead:   /\b(lead|staff|principal|architect|director|head of|manager|vp|chief)\b/i,
+      };
+      if (sen && senMap[sen]) j = j.filter(x => senMap[sen].test(x.title ?? ''));
       if (this.soloExclusivas) j = j.filter(x => x.not_on_linkedin === true);
+
       return j;
     },
 
@@ -867,14 +1014,25 @@ createApp({
       const cutoff = Date.now() - 7 * 86_400_000;
       return this.jobs.filter(j => new Date(j.sent_at).getTime() >= cutoff).length;
     },
+
+    /* Primer miembro registrado (widget Brian) */
+    brianConfig() {
+      return this.members[0] || null;
+    },
+
+    brianTechs() {
+      return this.brianConfig
+        ? (this.brianConfig.tech_stack ?? '').split(',').map(t => t.trim()).filter(Boolean)
+        : [];
+    },
   },
 
   methods: {
-    // ── Auth ──────────────────────────────────────────────
+    /* ── Auth ──────────────────────────────── */
     async init() {
       const { data: { session } } = await db.auth.getSession();
       this.session = session;
-      if (session) this.loadTechCloud();
+      if (session) { this.loadTechCloud(); this.loadMembers(); }
     },
 
     async login() {
@@ -885,7 +1043,7 @@ createApp({
       } else {
         const { data: { session } } = await db.auth.getSession();
         this.session = session;
-        this.loadTechCloud();
+        this.loadTechCloud(); this.loadMembers();
       }
       this.loginLoading = false;
     },
@@ -896,27 +1054,28 @@ createApp({
       this.session = null; this.logoutLoading = false;
     },
 
-    // ── Navigation ────────────────────────────────────────
+    /* ── Navigation ────────────────────────── */
     go(name) {
       this.panel = name;
-      if (name === 'fuentes')  this.loadFuentes();
+      if (name === 'feed')     this.loadFuentes();
       if (name === 'miembros') this.loadMembers();
-      if (name === 'buscador') this.loadJobs();
+      if (name === 'metricas') { this.loadMembers(); if (!this.jobs.length) this.loadJobs(); }
+      if (name === 'buscador') { if (!this.jobs.length) this.loadJobs(); }
     },
 
-    // ── Tech cloud ────────────────────────────────────────
+    /* ── Tech cloud ────────────────────────── */
     async loadTechCloud() {
       const { data } = await db.from('search_filters').select('tech_stack');
       if (!data?.length) return;
-      const all = data.flatMap(r => (r.tech_stack ?? '').split(',')).map(t => t.trim()).filter(Boolean);
+      const all  = data.flatMap(r => (r.tech_stack ?? '').split(',')).map(t => t.trim()).filter(Boolean);
       const uniq = [...new Set(all.map(t => t.toLowerCase()))].map(t => all.find(o => o.toLowerCase() === t));
       this.techCloud = uniq.sort();
     },
 
     addTechTag(tech) {
       const cur = this.form.tech_stack.trim();
-      const existing = cur.split(',').map(t => t.trim().toLowerCase()).filter(Boolean);
-      if (!existing.includes(tech.toLowerCase()))
+      const ex  = cur.split(',').map(t => t.trim().toLowerCase()).filter(Boolean);
+      if (!ex.includes(tech.toLowerCase()))
         this.form.tech_stack = cur ? `${cur}, ${tech}` : tech;
     },
 
@@ -928,7 +1087,7 @@ createApp({
       this.newTag = '';
     },
 
-    // ── Submit form ───────────────────────────────────────
+    /* ── Config form ───────────────────────── */
     async submitForm() {
       this.formSubmitted = true;
       if (!this.form.job_type.length) return;
@@ -939,10 +1098,9 @@ createApp({
         location:      this.form.location,
         telegram_user: this.form.telegram_user.replace(/^@/, ''),
       });
-      if (error) {
-        this.formError = 'No se pudo guardar.'; console.error(error);
-      } else {
-        this.formSuccess = 'Criterios guardados correctamente.';
+      if (error) { this.formError = 'No se pudo guardar.'; console.error(error); }
+      else {
+        this.formSuccess = 'Criterios guardados.';
         this.form = { tech_stack: '', job_type: [], location: '', telegram_user: '' };
         this.formSubmitted = false;
         this.loadMembers();
@@ -950,7 +1108,7 @@ createApp({
       this.formLoading = false;
     },
 
-    // ── Members ───────────────────────────────────────────
+    /* ── Members ───────────────────────────── */
     async loadMembers() {
       this.membersLoading = true;
       const { data } = await db.from('search_filters')
@@ -966,12 +1124,9 @@ createApp({
     },
 
     openEdit(row) {
-      this.editRow = row;
-      this.editTech = row.tech_stack;
-      this.editLocation = row.location;
+      this.editRow = row; this.editTech = row.tech_stack; this.editLocation = row.location;
       this.editJobType = (row.job_type ?? '').split(',').filter(Boolean);
-      this.editError = '';
-      this.editModal = true;
+      this.editError = ''; this.editModal = true;
     },
 
     closeEdit() { this.editModal = false; },
@@ -987,18 +1142,17 @@ createApp({
       this.closeEdit(); this.loadMembers();
     },
 
-    techsOf(m) { return (m.tech_stack ?? '').split(',').map(t => t.trim()).filter(Boolean); },
+    techsOf(m)       { return (m.tech_stack ?? '').split(',').map(t => t.trim()).filter(Boolean); },
     jobTypeLabel(jt) {
       const map = { remote: 'Remoto', hybrid: 'Híbrido', 'on-site': 'Presencial' };
       return (jt ?? '').split(',').map(t => map[t] ?? t).filter(Boolean).join(', ');
     },
 
-    // ── Fuentes ───────────────────────────────────────────
+    /* ── Fuentes ───────────────────────────── */
     async loadFuentes() {
       this.fuentesLoading = true;
       const { data } = await db.from('fuentes_scraper').select('id, domain').order('domain');
-      this.fuentes = data || [];
-      this.fuentesLoading = false;
+      this.fuentes = data || []; this.fuentesLoading = false;
     },
 
     async deleteFuente(id, domain) {
@@ -1027,7 +1181,7 @@ createApp({
       const lines = this.manualUrls.split('\n').map(l => l.trim()).filter(Boolean);
       this.parsedDomains = this.extractDomains(lines);
       this.validationDone = false; this.alreadyDomains = []; this.newDomains = [];
-      this.selectedDomains = []; this.saveDomainsOk = false; this.saveDomainsErr = '';
+      this.selectedDomains = []; this.saveDomainsOk = false;
     },
 
     async handleFile(e) {
@@ -1039,7 +1193,7 @@ createApp({
         const rows = XLSX.utils.sheet_to_json(sh, { header: 1 });
         this.parsedDomains = this.extractDomains(rows.map(r => r[0]).filter(Boolean));
         this.validationDone = false; this.alreadyDomains = []; this.newDomains = [];
-        this.selectedDomains = []; this.saveDomainsOk = false; this.saveDomainsErr = '';
+        this.selectedDomains = []; this.saveDomainsOk = false;
       } catch { alert('No se pudo leer el archivo.'); }
     },
 
@@ -1047,42 +1201,37 @@ createApp({
       const { data } = await db.from('fuentes_scraper').select('domain');
       const existSet = new Set((data || []).map(r => r.domain.toLowerCase()));
       this.alreadyDomains = this.parsedDomains.filter(d => existSet.has(d.toLowerCase()));
-      this.newDomains = this.parsedDomains.filter(d => !existSet.has(d.toLowerCase()));
+      this.newDomains      = this.parsedDomains.filter(d => !existSet.has(d.toLowerCase()));
       this.selectedDomains = [...this.newDomains];
-      this.validationDone = true;
+      this.validationDone  = true;
     },
 
     async saveDomains() {
       if (!this.selectedDomains.length) return;
-      this.savingDomains = true; this.saveDomainsErr = '';
+      this.savingDomains = true;
       const { error } = await db.from('fuentes_scraper')
         .upsert(this.selectedDomains.map(d => ({ domain: d })), { onConflict: 'domain' });
       this.savingDomains = false;
       if (error) { this.saveDomainsErr = error.message; return; }
       this.saveDomainsOk = true;
-      this.newDomains = []; this.selectedDomains = [];
-      this.parsedDomains = []; this.manualUrls = '';
-      this.validationDone = false;
+      this.newDomains = []; this.selectedDomains = []; this.parsedDomains = [];
+      this.manualUrls = ''; this.validationDone = false;
       this.loadFuentes();
     },
 
-    // ── Jobs ──────────────────────────────────────────────
+    /* ── Jobs ──────────────────────────────── */
     async loadJobs() {
       this.jobsLoading = true; this.jobs = []; this.displayLimit = 100;
-      this.jobSearch = ''; this.jobLocation = ''; this.jobSeniority = '';
-      this.jobTime = 0; this.jobMode = 'all'; this.soloExclusivas = false;
-      this.communityStatus = '';
       const { data } = await db.from('sent_jobs')
         .select('title, company, job_url, sent_at, not_on_linkedin')
         .order('sent_at', { ascending: false });
-      this.jobs = data || [];
-      this.jobsLoading = false;
+      this.jobs = data || []; this.jobsLoading = false;
     },
 
     async scrapeCommunity() {
       this.scrapingCommunity = true; this.communityStatus = '';
       try {
-        const p = new URLSearchParams({ q: this.jobSearch, location: this.jobLocation, source: this.communitySource, limit: '120' });
+        const p   = new URLSearchParams({ q: this.jobSearch, location: this.jobLocation, source: this.communitySource, limit: '120' });
         const res = await fetch(`http://127.0.0.1:8765/search?${p}`);
         const pl  = await res.json();
         if (!res.ok || !pl.ok) throw new Error(pl.error || `HTTP ${res.status}`);
@@ -1099,38 +1248,39 @@ createApp({
       this.scrapingCommunity = false;
     },
 
+    /* ── Job helpers ───────────────────────── */
     locOf(job) {
       const text = `${job.title ?? ''} ${job.company ?? ''}`.toLowerCase();
-      if (/\b(remote|remoto|anywhere|distributed|worldwide)\b/.test(text)) return { label: 'Remote', cls: 'b-green' };
-      if (/\b(latam|latin\s*america|argentina|uruguay|chile|colombia|brasil|brazil|m[eé]xico|peru)\b/.test(text)) return { label: 'LATAM', cls: 'b-blue' };
+      if (/\b(remote|remoto|anywhere|distributed|worldwide)\b/.test(text))  return { label: 'Remote',  cls: 'badge-remote' };
+      if (/\b(latam|latin\s*america|argentina|uruguay|chile|colombia|brasil|brazil|m[eé]xico|peru)\b/.test(text)) return { label: 'LATAM', cls: 'badge-latam' };
       try {
         const host = new URL(job.job_url ?? '').hostname;
-        const ats = { greenhouse:'Greenhouse', lever:'Lever', ashby:'Ashby', workable:'Workable', smartrecruiters:'SmartRecruiters', bamboohr:'BambooHR', remoteok:'RemoteOK', remotive:'Remotive', breezy:'Breezy', recruitee:'Recruitee' };
-        for (const [k, v] of Object.entries(ats)) if (host.includes(k)) return { label: v, cls: 'b-muted' };
+        const ats  = { greenhouse:'Greenhouse', lever:'Lever', ashby:'Ashby', workable:'Workable', smartrecruiters:'SmartRecruit', bamboohr:'BambooHR', remoteok:'RemoteOK', remotive:'Remotive' };
+        for (const [k, v] of Object.entries(ats)) if (host.includes(k)) return { label: v, cls: 'badge-ats' };
       } catch {}
       return null;
     },
 
     senOf(job) {
       const t = (job.title ?? '').toLowerCase();
-      if (/\b(lead|staff|principal|architect|director|head of|manager|vp|chief)\b/.test(t)) return { label: 'Lead', cls: 'b-red' };
-      if (/\b(senior|sr\.?)\b/.test(t)) return { label: 'Senior', cls: 'b-orange' };
-      if (/\b(mid[\s-]?level|semi[\s-]?senior|ssr|pleno|middle)\b/.test(t)) return { label: 'Mid', cls: 'b-yellow' };
-      if (/\b(junior|jr\.?|entry[\s-]level|intern|trainee)\b/.test(t)) return { label: 'Junior', cls: 'b-green' };
+      if (/\b(lead|staff|principal|architect|director|head of|manager|vp|chief)\b/.test(t)) return { label: 'Lead',   cls: 'badge-lead' };
+      if (/\b(senior|sr\.?)\b/.test(t))                                                     return { label: 'Senior', cls: 'badge-senior' };
+      if (/\b(mid[\s-]?level|semi[\s-]?senior|ssr|pleno|middle)\b/.test(t))                 return { label: 'Mid',    cls: 'badge-mid' };
+      if (/\b(junior|jr\.?|entry[\s-]level|intern|trainee)\b/.test(t))                     return { label: 'Junior', cls: 'badge-junior' };
       return null;
     },
 
-    timeOf(dateStr) {
-      const diff  = Math.max(0, Date.now() - new Date(dateStr).getTime());
+    timeOf(job) {
+      const diff  = Math.max(0, Date.now() - new Date(job.sent_at).getTime());
       const mins  = Math.floor(diff / 60_000);
       const hours = Math.floor(diff / 3_600_000);
       const days  = Math.floor(diff / 86_400_000);
       if (mins  < 1)  return { text: 'ahora', hot: true };
-      if (mins  < 60) return { text: `${mins}m`, hot: true };
+      if (mins  < 60) return { text: `${mins}m`,  hot: true };
       if (hours < 6)  return { text: `${hours}h`, hot: true };
       if (hours < 24) return { text: `${hours}h`, hot: false };
-      if (days  < 7)  return { text: `${days}d`, hot: false };
-      return { text: new Date(dateStr).toLocaleDateString('es-AR', { day: 'numeric', month: 'short' }), hot: false };
+      if (days  < 7)  return { text: `${days}d`,  hot: false };
+      return { text: new Date(job.sent_at).toLocaleDateString('es-AR', { day: 'numeric', month: 'short' }), hot: false };
     },
 
     faviconOf(job) {
