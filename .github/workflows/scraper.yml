@@ -1,41 +1,44 @@
-name: Job Scraper
+name: Job Scraper Cron Execution
 
 on:
   schedule:
     # Se ejecuta cada 8 horas (00:00, 08:00, 16:00 UTC)
-    - cron: "0 */8 * * *"
-  workflow_dispatch: # Permite ejecutar el workflow manualmente desde GitHub
+    - cron: '0 */8 * * *'
+  workflow_dispatch: # Permite ejecutar el bot manualmente desde la interfaz de GitHub
 
 jobs:
-  scrape:
-    name: Run trovilo scraper
+  scrape_and_notify:
     runs-on: ubuntu-latest
 
     steps:
-      # 1. Clonar el repositorio
-      - name: Checkout del repositorio
-        uses: actions/checkout@v4.3.0
+      # 1. Traer el repositorio utilizando la última versión estable (v4)
+      - name: Checkout Repository
+        uses: actions/checkout@v4
 
-      # 2. Configurar Python 3.11
-      - name: Configurar Python 3.11
-        uses: actions/setup-python@v5.6.0
+      # 2. Configurar el entorno de ejecución para Python (v5 es compatible con Node 24)
+      - name: Set up Python 3.11
+        uses: actions/setup-python@v5
         with:
-          python-version: "3.11"
-          cache: "pip"
+          python-version: '3.11'
+          cache: 'pip' # Optimiza el tiempo instalando dependencias desde caché
 
-      # 3. Instalar dependencias de Python
-      - name: Instalar dependencias
-        run: pip install -r requirements.txt
+      # 3. Instalar las librerías del proyecto
+      - name: Install Python Dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
 
-      # 4. Instalar Chromium y sus dependencias del sistema operativo
-      - name: Instalar Playwright y dependencias del sistema
-        run: playwright install --with-deps chromium
+      # 4. Instalar los binarios del navegador de Playwright con sus dependencias del sistema
+      - name: Install Playwright Web-Browsers
+        run: |
+          playwright install chromium
+          playwright install-deps chromium
 
-      # 5. Ejecutar el scraper con los secretos del repositorio inyectados como env vars
-      - name: Ejecutar scraper
+      # 5. Ejecutar el orquestador inyectando las credenciales secretas del sistema
+      - name: Run Mass Job Scraper
         env:
-          SUPABASE_URL:         ${{ secrets.SUPABASE_URL }}
-          SUPABASE_KEY:         ${{ secrets.SUPABASE_KEY }}
-          TELEGRAM_BOT_TOKEN:   ${{ secrets.TELEGRAM_BOT_TOKEN }}
-          TELEGRAM_CHAT_ID:     ${{ secrets.TELEGRAM_CHAT_ID }}
+          SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+          SUPABASE_KEY: ${{ secrets.SUPABASE_KEY }}
+          TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
+          TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
         run: python main.py
