@@ -3,6 +3,7 @@ company_discovery.py
 --------------------
 Descubre automáticamente empresas nuevas que publican ofertas en Greenhouse
 o Lever haciendo búsquedas con filtro site: en DuckDuckGo Lite via Playwright.
+Luego persiste las empresas nuevas en la tabla 'target_companies' de Supabase.
 
 Flujo:
   1. Construye queries DDG Lite con site:boards.greenhouse.io y site:jobs.lever.co.
@@ -10,11 +11,12 @@ Flujo:
   3. Decodifica URLs de redirección de DDG (formato //duckduckgo.com/l/?uddg=...).
   4. Aplica regex para aislar el company_id (primer segmento de path).
   5. Retorna lista de dicts listos para insertar en target_companies.
+  6. save_discovered_companies() cruza contra Supabase y persiste solo las nuevas.
 
 Uso:
-    from company_discovery import discover_new_ats_companies
-    companies = discover_new_ats_companies("QA")
-    # [{'company_name': 'vtex', 'ats_type': 'lever', 'ats_id': 'vtex'}, ...]
+    from company_discovery import discover_new_ats_companies, save_discovered_companies
+    found = discover_new_ats_companies("QA")
+    save_discovered_companies(found)
 """
 import re
 import logging
@@ -271,3 +273,80 @@ def discover_new_ats_companies(tech_keyword: str = "QA") -> list[dict]:
 
     log.info("[discovery] Finalizado — %d empresa(s) nueva(s) encontrada(s).", len(results))
     return results
+
+
+# ---------------------------------------------------------------------------
+# Persistencia en Supabase
+# ---------------------------------------------------------------------------
+
+def save_discovered_companies(discovered_list: list[dict]) -> int:
+    """
+    Persiste en 'target_companies' las empresas descubiertas,
+    insertando solo las que aún no existen (sin pisar datos previos).
+
+    Estrategia:
+      1. Consulta los ats_id ya presentes en la tabla.
+      2. Filtra la lista recibida para identificar las genuinamente nuevas.
+      3. Hace upsert con ignore_duplicates=True (→ ON CONFLICT DO NOTHING)
+         como segunda línea de defensa ante race conditions.
+
+    El campo 'active' queda en TRUE por su DEFAULT en Postgres;
+    'created_at' se asigna automáticamente con NOW().
+
+    Parámetros:
+        discovered_list: salida de discover_new_ats_companies().
+                         Cada dict debe tener: company_name, ats_type, ats_id.
+
+    Retorna:
+        Número de empresas nuevas efectivamente insertadas (0 si ninguna).
+    """
+    if not discovered_list:
+        log.info("[discovery] save: lista vacía, nada que guardar.")
+        return 0
+
+    # Importación diferida para no requerir variables de entorno al importar el módulo
+    from notifier import supabase
+
+    # 1. Obtener todos los ats_id ya registrados en la tabla
+    try:
+        resp     = supabase.table("target_companies").select("ats_id").execute()
+        existing = {row["ats_id"] for row in (resp.data or [])}
+    except Exception as exc:
+        log.error("[discovery] save: error consultando target_companies: %s", exc)
+        return 0
+
+    # 2. Aislar las empresas que todavía no conocemos
+    new_companies = [c for c in discovered_list if c.get("ats_id") not in existing]
+
+    known_count = len(discovered_list) - len(new_companies)
+    log.info(
+        "[discovery] save: %d descubiertas | %d ya en BD | %d nuevas para insertar.",
+        len(discovered_list),
+        known_count,
+        len(new_companies),
+    )
+
+    if not new_companies:
+        log.info("[discovery] save: sin empresas nuevas. Base de datos actualizada.")
+        return 0
+
+    # 3. Upsert con ignore_duplicates=True → ON CONFLICT (ats_id) DO NOTHING
+    #    Actúa como segunda defensa en caso de race condition o ejecuciones paralelas.
+    try:
+        supabase.table("target_companies").upsert(
+            new_companies,
+            on_conflict="ats_id",
+            ignore_duplicates=True,
+        ).execute()
+    except Exception as exc:
+        log.error("[discovery] save: error en upsert: %s", exc)
+        return 0
+
+    log.info(
+        "[discovery] save: ✓ %d empresa(s) nueva(s) agregada(s) a target_companies.",
+        len(new_companies),
+    )
+    for c in new_companies:
+        log.info("  + %-20s [%s]", c["ats_id"], c["ats_type"])
+
+    return len(new_companies)
